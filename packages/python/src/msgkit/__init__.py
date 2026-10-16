@@ -15,7 +15,7 @@ data is identical in every language binding. Errors raise :class:`MsgkitError`.
 from __future__ import annotations
 
 import json
-from typing import Any, Mapping, Optional, Union
+from typing import Any, Mapping, Optional, Union, cast
 
 from ._native import dispatch, native_version
 from .errors import MsgkitError
@@ -45,7 +45,7 @@ def _options(**kwargs: Any) -> dict[str, Any]:
 
 def version() -> VersionInfo:
     """Versions of the native library and of the JSON data contract."""
-    return dispatch("version")
+    return cast(VersionInfo, dispatch("version"))
 
 
 def parse_whatsapp_export(
@@ -71,7 +71,7 @@ def parse_whatsapp_export(
         conversation_id=conversation_id,
         default_country_code=default_country_code,
     )
-    return dispatch("parse_whatsapp_export", {"text": text, "options": options})
+    return cast(ImportReport, dispatch("parse_whatsapp_export", {"text": text, "options": options}))
 
 
 def parse_facebook_export(
@@ -87,7 +87,7 @@ def parse_facebook_export(
     if isinstance(thread, str):
         thread = json.loads(thread)
     options = _options(self_name=self_name, conversation_id=conversation_id)
-    return dispatch("parse_facebook_export", {"thread": thread, "options": options})
+    return cast(ImportReport, dispatch("parse_facebook_export", {"thread": thread, "options": options}))
 
 
 def normalize_device(
@@ -98,7 +98,7 @@ def normalize_device(
 ) -> ImportReport:
     """Normalizes Android SMS and call-log rows collected on a device."""
     options = _options(own_number=own_number, default_country_code=default_country_code)
-    return dispatch("normalize_device", {"batch": batch, "options": options})
+    return cast(ImportReport, dispatch("normalize_device", {"batch": batch, "options": options}))
 
 
 def normalize_whatsapp_webhook(payload: Mapping[str, Any]) -> ImportReport:
@@ -107,7 +107,7 @@ def normalize_whatsapp_webhook(payload: Mapping[str, Any]) -> ImportReport:
     Does **not** verify the signature: call :func:`verify_signature` on the raw
     request body first.
     """
-    return dispatch("normalize_whatsapp_webhook", {"payload": payload})
+    return cast(ImportReport, dispatch("normalize_whatsapp_webhook", {"payload": payload}))
 
 
 def normalize_messenger_webhook(payload: Mapping[str, Any]) -> ImportReport:
@@ -116,7 +116,7 @@ def normalize_messenger_webhook(payload: Mapping[str, Any]) -> ImportReport:
     Does **not** verify the signature: call :func:`verify_signature` on the raw
     request body first.
     """
-    return dispatch("normalize_messenger_webhook", {"payload": payload})
+    return cast(ImportReport, dispatch("normalize_messenger_webhook", {"payload": payload}))
 
 
 def verify_signature(*, secret: str, body: Union[str, bytes], signature: str) -> bool:

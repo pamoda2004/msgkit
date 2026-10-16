@@ -4,6 +4,7 @@ import json
 import threading
 import unittest
 from pathlib import Path
+from typing import Any, List
 
 import msgkit
 
@@ -14,29 +15,29 @@ def fixture(name: str) -> str:
     return (FIXTURES / name).read_text(encoding="utf-8")
 
 
-def messages(report):
+def messages(report: Any) -> List[Any]:
     return [e for e in report["events"] if e["type"] == "message"]
 
 
-def calls(report):
+def calls(report: Any) -> List[Any]:
     return [e for e in report["events"] if e["type"] == "call"]
 
 
 class VersionTests(unittest.TestCase):
-    def test_versions_agree(self):
+    def test_versions_agree(self) -> None:
         info = msgkit.version()
         self.assertEqual(info["schema_version"], "1.0.0")
         self.assertEqual(info["crate_version"], msgkit.__version__)
         self.assertEqual(msgkit.native_version(), msgkit.__version__)
 
-    def test_package_version_matches_the_rust_workspace(self):
+    def test_package_version_matches_the_rust_workspace(self) -> None:
         cargo = (Path(__file__).resolve().parents[3] / "Cargo.toml").read_text(encoding="utf-8")
-        line = next(l for l in cargo.splitlines() if l.startswith("version = "))
+        line = next(row for row in cargo.splitlines() if row.startswith("version = "))
         self.assertEqual(line.split('"')[1], msgkit.__version__)
 
 
 class WhatsAppExportTests(unittest.TestCase):
-    def test_android_day_first(self):
+    def test_android_day_first(self) -> None:
         r = msgkit.parse_whatsapp_export(fixture("whatsapp_android_dmy.txt"))
         self.assertEqual(r["warnings"], [])
         self.assertEqual(len(r["events"]), 8)
@@ -47,15 +48,13 @@ class WhatsAppExportTests(unittest.TestCase):
         self.assertEqual(len(oks), 2)
         self.assertNotEqual(oks[0]["id"], oks[1]["id"])
 
-    def test_keyword_options_are_applied(self):
-        r = msgkit.parse_whatsapp_export(
-            fixture("whatsapp_android_dmy.txt"), self_name="alice", utc_offset_minutes=330
-        )
+    def test_keyword_options_are_applied(self) -> None:
+        r = msgkit.parse_whatsapp_export(fixture("whatsapp_android_dmy.txt"), self_name="alice", utc_offset_minutes=330)
         self.assertEqual(r["events"][0]["timestamp"], "2023-12-31T16:11:00Z")
         self.assertEqual(r["events"][0]["direction"], "outbound")
         self.assertEqual(r["events"][1]["direction"], "inbound")
 
-    def test_explicit_date_order(self):
+    def test_explicit_date_order(self) -> None:
         text = "03/04/2024, 10:00 - A: x\n"
         auto = msgkit.parse_whatsapp_export(text)
         self.assertTrue(any("ambiguous" in w for w in auto["warnings"]))
@@ -64,26 +63,27 @@ class WhatsAppExportTests(unittest.TestCase):
         self.assertEqual(mdy["warnings"], [])
         self.assertEqual(mdy["events"][0]["timestamp"], "2024-03-04T10:00:00Z")
 
-    def test_unicode_round_trip(self):
+    def test_unicode_round_trip(self) -> None:
         body = 'සිංහල 🎉 café "quoted" \\ back\\slash'
         r = msgkit.parse_whatsapp_export(f"01/02/2024, 10:00 - සමන්: {body}\n")
-        self.assertEqual(r["events"][0]["body"], body)
-        self.assertEqual(r["events"][0]["sender"]["id"], "සමන්")
+        first: Any = r["events"][0]
+        self.assertEqual(first["body"], body)
+        self.assertEqual(first["sender"]["id"], "සමන්")
 
-    def test_bom_is_tolerated(self):
-        r = msgkit.parse_whatsapp_export("﻿01/02/2024, 10:00 - A: hi\n")
+    def test_bom_is_tolerated(self) -> None:
+        r = msgkit.parse_whatsapp_export("\ufeff01/02/2024, 10:00 - A: hi\n")
         self.assertEqual(len(r["events"]), 1)
 
-    def test_reimport_gives_identical_ids(self):
+    def test_reimport_gives_identical_ids(self) -> None:
         text = fixture("whatsapp_android_dmy.txt")
         self.assertEqual(msgkit.parse_whatsapp_export(text), msgkit.parse_whatsapp_export(text))
 
-    def test_garbage_is_a_warning_not_an_exception(self):
+    def test_garbage_is_a_warning_not_an_exception(self) -> None:
         r = msgkit.parse_whatsapp_export("not a chat export")
         self.assertEqual(r["events"], [])
         self.assertTrue(r["warnings"])
 
-    def test_large_input(self):
+    def test_large_input(self) -> None:
         line = "31/12/2023, 21:41 - Alice: some reasonably long message body to make the file big\n"
         r = msgkit.parse_whatsapp_export(line * 50_000)
         self.assertEqual(len(r["events"]), 50_000)
@@ -91,7 +91,7 @@ class WhatsAppExportTests(unittest.TestCase):
 
 
 class OtherSourceTests(unittest.TestCase):
-    def test_facebook_object_and_string(self):
+    def test_facebook_object_and_string(self) -> None:
         text = fixture("facebook_thread.json")
         a = msgkit.parse_facebook_export(json.loads(text), self_name="Alice Perera")
         b = msgkit.parse_facebook_export(text, self_name="Alice Perera")
@@ -101,21 +101,21 @@ class OtherSourceTests(unittest.TestCase):
         self.assertEqual(messages(a)[2]["direction"], "outbound")
         self.assertEqual(calls(a)[1]["duration_secs"], 125)
 
-    def test_device_batch(self):
+    def test_device_batch(self) -> None:
         batch = json.loads(fixture("device_batch.json"))
         r = msgkit.normalize_device(batch, own_number="+94710000000", default_country_code="94")
         self.assertEqual(len(messages(r)), 3)
         self.assertEqual(messages(r)[1]["recipients"][0]["id"], "+94771234567")
         self.assertEqual([c["outcome"] for c in calls(r)], ["answered", "missed", "answered", "rejected"])
 
-    def test_webhooks(self):
+    def test_webhooks(self) -> None:
         wa = msgkit.normalize_whatsapp_webhook(json.loads(fixture("whatsapp_webhook.json")))
         self.assertEqual(len(messages(wa)), 3)
         self.assertEqual(messages(wa)[0]["external_id"], "wamid.AAA")
         ms = msgkit.normalize_messenger_webhook(json.loads(fixture("messenger_webhook.json")))
         self.assertEqual([m["direction"] for m in messages(ms)], ["inbound", "outbound"])
 
-    def test_signature_verification_matches_hmac(self):
+    def test_signature_verification_matches_hmac(self) -> None:
         body = fixture("whatsapp_webhook.json")
         sig = "sha256=" + hmac.new(b"app-secret", body.encode(), hashlib.sha256).hexdigest()
         self.assertTrue(msgkit.verify_signature(secret="app-secret", body=body, signature=sig))
@@ -126,7 +126,7 @@ class OtherSourceTests(unittest.TestCase):
 
 
 class ErrorTests(unittest.TestCase):
-    def test_error_codes(self):
+    def test_error_codes(self) -> None:
         with self.assertRaises(msgkit.MsgkitError) as ctx:
             msgkit.dispatch("nope")
         self.assertEqual(ctx.exception.code, "unknown_op")
@@ -139,17 +139,17 @@ class ErrorTests(unittest.TestCase):
 
 
 class ConcurrencyTests(unittest.TestCase):
-    def test_threads_share_the_library_safely(self):
+    def test_threads_share_the_library_safely(self) -> None:
         text = fixture("whatsapp_android_dmy.txt")
         expected = msgkit.parse_whatsapp_export(text)
         failures = []
 
-        def work():
+        def work() -> None:
             try:
                 for _ in range(100):
                     if msgkit.parse_whatsapp_export(text) != expected:
                         failures.append("mismatch")
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 failures.append(repr(e))
 
         threads = [threading.Thread(target=work) for _ in range(8)]

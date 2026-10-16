@@ -1,0 +1,32 @@
+# Python lint and format configuration for the whole repository (packages/python, scripts, examples).
+line-length = 120
+target-version = "py39"
+extend-exclude = ["packages/node", "packages/kotlin", "target", "**/build", "**/.venv", "**/wheelhouse"]
+
+[lint]
+select = [
+  "E", "W",   # pycodestyle
+  "F",        # pyflakes
+  "I",        # import order
+  "B",        # bugbear
+  "UP",       # pyupgrade
+  "SIM",      # simplifications
+  "C4",       # comprehensions
+  "PTH",      # pathlib
+  "N",        # naming
+  "RUF",      # ruff specific
+  "S",        # security (bandit)
+  "A",        # shadowed builtins
+  "T20",      # no stray print() in library code
+]
+ignore = [
+  "UP006", "UP007", "UP035", "UP045",  # keep typing.List/Union: the package supports Python 3.9
+]
+
+[lint.per-file-ignores]
+# Tests and tooling scripts legitimately assert, print and spawn processes.
+"**/tests/**" = ["S101", "S105", "S106", "S311", "T201"]
+"scripts/**" = ["S101", "S603", "S607", "T201"]
+"examples/**" = ["T201", "S106"]  # sample secrets in demos
+"packages/python/scripts/**" = ["S603", "S607", "T201"]
+"packages/python/setup.py" = ["A005"]

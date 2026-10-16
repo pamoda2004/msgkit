@@ -14,12 +14,13 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import Any
 
 HERE = Path(__file__).resolve().parent
 PKG = HERE.parent
 
 
-def run(cmd: list[str], **kwargs) -> None:
+def run(cmd: list[str], **kwargs: Any) -> None:
     print("+", " ".join(cmd), flush=True)
     subprocess.run(cmd, check=True, **kwargs)
 
@@ -29,8 +30,9 @@ def main() -> None:
         tmp_path = Path(tmp)
         wheelhouse = tmp_path / "wheelhouse"
         run([sys.executable, str(HERE / "build_wheel.py"), "--out", str(wheelhouse)])
-        wheels = sorted(wheelhouse.glob("msgkit-*.whl"))
-        assert len(wheels) == 1, f"expected exactly one wheel, found {wheels}"
+        wheels = sorted(wheelhouse.glob("msgkit_core-*.whl"))
+        if len(wheels) != 1:
+            raise SystemExit(f"expected exactly one wheel, found {wheels}")
 
         venv = tmp_path / "venv"
         run([sys.executable, "-m", "venv", str(venv)])
@@ -39,9 +41,12 @@ def main() -> None:
 
         # Show where the library comes from; it must be inside the venv.
         code = "import msgkit._native as n; print([str(p) for p in n._candidates() if p.is_file()][0])"
-        out = subprocess.run([str(python), "-c", code], check=True, capture_output=True, text=True, cwd=tmp).stdout.strip()
+        out = subprocess.run(
+            [str(python), "-c", code], check=True, capture_output=True, text=True, cwd=tmp
+        ).stdout.strip()
         print("native library:", out)
-        assert str(venv) in out, "the wheel did not provide the native library"
+        if str(venv) not in out:
+            raise SystemExit("the wheel did not provide the native library")
 
         run([str(python), "-m", "unittest", "discover", "-s", str(PKG / "tests"), "-v"], cwd=tmp)
 

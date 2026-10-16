@@ -54,7 +54,7 @@ def main() -> None:
         [sys.executable, "-m", "build", "--wheel", "--outdir", args.out, str(PKG)],
         check=True,
     )
-    print("built:", *sorted(Path(args.out).glob("msgkit-*.whl")))
+    print("built:", *sorted(Path(args.out).glob("msgkit_core-*.whl")))
 
 
 if __name__ == "__main__":

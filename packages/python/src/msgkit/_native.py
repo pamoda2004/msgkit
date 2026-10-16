@@ -17,9 +17,10 @@ _lib: Optional[ctypes.CDLL] = None
 
 
 def library_filename() -> str:
-    if sys.platform == "win32":
+    platform = sys.platform  # (a plain variable keeps type checkers from pruning branches per host OS)
+    if platform == "win32":
         return "msgkit_ffi.dll"
-    if sys.platform == "darwin":
+    if platform == "darwin":
         return "libmsgkit_ffi.dylib"
     return "libmsgkit_ffi.so"
 
@@ -65,7 +66,7 @@ def _load() -> ctypes.CDLL:
 
 
 def native_version() -> str:
-    return _load().msgkit_version().decode("ascii")
+    return str(_load().msgkit_version().decode("ascii"))
 
 
 def dispatch(op: str, payload: Any = None) -> Any:

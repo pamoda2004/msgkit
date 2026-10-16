@@ -1,0 +1,7 @@
+# Pinned Python developer tooling (lint, types, audit, packaging). Dependabot keeps these current.
+build==1.6.1
+mypy==2.4.0
+pip_audit==2.10.1
+ruff==0.17.1
+setuptools==84.0.0
+wheel==0.48.0

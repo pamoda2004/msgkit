@@ -23,7 +23,7 @@ class BinaryDistribution(Distribution):
         return True
 
 
-class bdist_wheel(_bdist_wheel):
+class BDistWheel(_bdist_wheel):
     def finalize_options(self):
         super().finalize_options()
         self.root_is_pure = False
@@ -35,4 +35,4 @@ class bdist_wheel(_bdist_wheel):
         return "py3", "none", os.environ.get("MSGKIT_WHEEL_PLAT") or plat
 
 
-setup(cmdclass={"bdist_wheel": bdist_wheel}, distclass=BinaryDistribution)
+setup(cmdclass={"bdist_wheel": BDistWheel}, distclass=BinaryDistribution)

@@ -11,7 +11,9 @@ from pathlib import Path
 
 import msgkit
 
-default = Path(__file__).resolve().parents[3] / "crates" / "msgkit-core" / "tests" / "fixtures" / "whatsapp_android_dmy.txt"
+default = (
+    Path(__file__).resolve().parents[3] / "crates" / "msgkit-core" / "tests" / "fixtures" / "whatsapp_android_dmy.txt"
+)
 path = Path(sys.argv[1]) if len(sys.argv) > 1 else default
 report = msgkit.parse_whatsapp_export(path.read_text(encoding="utf-8-sig"), self_name="Alice", utc_offset_minutes=330)
 
@@ -33,4 +35,6 @@ print(f"first: {events[0]['timestamp']}  last: {events[-1]['timestamp']}")
 body = '{"object":"page","entry":[]}'
 good = "sha256=" + hmac.new(b"app-secret", body.encode(), hashlib.sha256).hexdigest()
 print(f"signature valid: {str(msgkit.verify_signature(secret='app-secret', body=body, signature=good)).lower()}")
-print(f"tampered body valid: {str(msgkit.verify_signature(secret='app-secret', body=body + ' ', signature=good)).lower()}")
+print(
+    f"tampered body valid: {str(msgkit.verify_signature(secret='app-secret', body=body + ' ', signature=good)).lower()}"
+)

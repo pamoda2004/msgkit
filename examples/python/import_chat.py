@@ -14,7 +14,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "packages" / "python" / "src"))
 
-import msgkit  # noqa: E402
+import msgkit
 
 
 def main() -> None:

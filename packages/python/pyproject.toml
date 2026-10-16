@@ -3,12 +3,13 @@ requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "msgkit"
+name = "msgkit-core"
 version = "0.1.0"
 description = "Import SMS, WhatsApp and Messenger messages and calls into one normalized model."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
+authors = [{ name = "Pamoda Jayathilaka" }]
 requires-python = ">=3.9"
 dependencies = []
 keywords = ["sms", "whatsapp", "messenger", "facebook", "import", "chat-export", "webhook"]
@@ -20,6 +21,11 @@ classifiers = [
   "Topic :: Communications :: Chat",
   "Typing :: Typed",
 ]
+
+[project.urls]
+Homepage = "https://github.com/pamoda2004/msgkit"
+Repository = "https://github.com/pamoda2004/msgkit"
+Issues = "https://github.com/pamoda2004/msgkit/issues"
 
 [tool.setuptools]
 package-dir = { "" = "src" }

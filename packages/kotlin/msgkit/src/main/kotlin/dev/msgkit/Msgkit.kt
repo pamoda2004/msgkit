@@ -24,26 +24,42 @@ import kotlinx.serialization.json.jsonPrimitive
  * input never throw; they are reported in [ImportReport.warnings].
  */
 public object Msgkit {
-    private val json = Json {
-        ignoreUnknownKeys = true // newer library versions may add fields
-        explicitNulls = false // omit nulls: the native side treats absent as default
-        classDiscriminator = "type"
-    }
+    private val json =
+        Json {
+            ignoreUnknownKeys = true // newer library versions may add fields
+            explicitNulls = false // omit nulls: the native side treats absent as default
+            classDiscriminator = "type"
+        }
 
     @Serializable
-    private class WhatsAppInput(val text: String, val options: WhatsAppExportOptions)
+    private class WhatsAppInput(
+        val text: String,
+        val options: WhatsAppExportOptions,
+    )
 
     @Serializable
-    private class FacebookInput(val thread: JsonElement, val options: FacebookExportOptions)
+    private class FacebookInput(
+        val thread: JsonElement,
+        val options: FacebookExportOptions,
+    )
 
     @Serializable
-    private class DeviceInput(val batch: DeviceBatch, val options: DeviceOptions)
+    private class DeviceInput(
+        val batch: DeviceBatch,
+        val options: DeviceOptions,
+    )
 
     @Serializable
-    private class WebhookInput(val payload: JsonElement)
+    private class WebhookInput(
+        val payload: JsonElement,
+    )
 
     @Serializable
-    private class SignatureInput(val secret: String, val body: String, val signature: String)
+    private class SignatureInput(
+        val secret: String,
+        val body: String,
+        val signature: String,
+    )
 
     /** Versions of the native library and of the JSON data contract. */
     @JvmStatic
@@ -98,8 +114,7 @@ public object Msgkit {
      * body first.
      */
     @JvmStatic
-    public fun normalizeWhatsAppWebhook(rawBody: String): ImportReport =
-        webhook("normalize_whatsapp_webhook", rawBody)
+    public fun normalizeWhatsAppWebhook(rawBody: String): ImportReport = webhook("normalize_whatsapp_webhook", rawBody)
 
     /**
      * Normalizes a Messenger Platform webhook body.
@@ -116,9 +131,16 @@ public object Msgkit {
      * request body (HMAC-SHA256 with the app secret, compared in constant time).
      */
     @JvmStatic
-    public fun verifySignature(secret: String, body: String, signature: String): Boolean {
+    public fun verifySignature(
+        secret: String,
+        body: String,
+        signature: String,
+    ): Boolean {
         val input = json.encodeToString(SignatureInput.serializer(), SignatureInput(secret, body, signature))
-        return data("verify_signature", input).jsonObject.getValue("valid").jsonPrimitive.boolean
+        return data("verify_signature", input)
+            .jsonObject
+            .getValue("valid")
+            .jsonPrimitive.boolean
     }
 
     /**
@@ -126,22 +148,38 @@ public object Msgkit {
      * JSON response envelope (`{"ok":true,"data":...}` or `{"ok":false,"error":...}`).
      */
     @JvmStatic
-    public fun dispatchRaw(op: String, inputJson: String): String = NativeBridge.call(op, inputJson)
+    public fun dispatchRaw(
+        op: String,
+        inputJson: String,
+    ): String = NativeBridge.call(op, inputJson)
 
-    private fun webhook(op: String, rawBody: String): ImportReport {
+    private fun webhook(
+        op: String,
+        rawBody: String,
+    ): ImportReport {
         val payload = parseJson(rawBody, "rawBody")
         val input = json.encodeToString(WebhookInput.serializer(), WebhookInput(payload))
         return call(op, input, ImportReport.serializer())
     }
 
-    private fun parseJson(text: String, argument: String): JsonElement =
+    private fun parseJson(
+        text: String,
+        argument: String,
+    ): JsonElement =
         try {
             json.parseToJsonElement(text)
-        } catch (e: kotlinx.serialization.SerializationException) {
-            throw MsgkitException("invalid_input", "$argument is not valid JSON: ${e.message}")
+        } catch (
+            @Suppress("SwallowedException") e: kotlinx.serialization.SerializationException,
+        ) {
+            // Deliberately neither chained nor quoted: the parser's message and stack trace include a
+            // snippet of the input, and message content must never reach error text or logs.
+            throw MsgkitException("invalid_input", "$argument is not valid JSON")
         }
 
-    private fun data(op: String, inputJson: String): JsonElement {
+    private fun data(
+        op: String,
+        inputJson: String,
+    ): JsonElement {
         val envelope = json.parseToJsonElement(NativeBridge.call(op, inputJson)).jsonObject
         if (!envelope.getValue("ok").jsonPrimitive.boolean) {
             val error = envelope.getValue("error").jsonObject
@@ -153,6 +191,9 @@ public object Msgkit {
         return envelope.getValue("data")
     }
 
-    private fun <T> call(op: String, inputJson: String, serializer: KSerializer<T>): T =
-        json.decodeFromJsonElement(serializer, data(op, inputJson))
+    private fun <T> call(
+        op: String,
+        inputJson: String,
+        serializer: KSerializer<T>,
+    ): T = json.decodeFromJsonElement(serializer, data(op, inputJson))
 }

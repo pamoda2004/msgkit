@@ -1,12 +1,16 @@
 plugins {
     id("com.android.library")
     `maven-publish`
+    id("org.jlleitschuh.gradle.ktlint")
+    id("dev.detekt")
 }
 
-val workspaceVersion: String = Regex("""(?m)^version = "(.+)"$""")
-    .find(rootDir.resolve("../../Cargo.toml").readText())!!.groupValues[1]
+val workspaceVersion: String =
+    Regex("""(?m)^version = "(.+)"$""")
+        .find(rootDir.resolve("../../Cargo.toml").readText())!!
+        .groupValues[1]
 
-group = "dev.msgkit"
+group = "io.github.pamoda2004"
 version = workspaceVersion
 
 android {
@@ -53,9 +57,30 @@ afterEvaluate {
                 pom {
                     name.set("msgkit for Android")
                     description.set("msgkit with native libraries for Android (arm64-v8a, armeabi-v7a, x86_64, x86).")
-                    licenses { license { name.set("MIT"); url.set("https://opensource.org/licenses/MIT") } }
+                    url.set("https://github.com/pamoda2004/msgkit")
+                    licenses {
+                        license {
+                            name.set("MIT")
+                            url.set("https://opensource.org/licenses/MIT")
+                        }
+                    }
+                    developers {
+                        developer {
+                            id.set("pamoda2004")
+                            name.set("Pamoda Jayathilaka")
+                        }
+                    }
+                    scm {
+                        url.set("https://github.com/pamoda2004/msgkit")
+                        connection.set("scm:git:https://github.com/pamoda2004/msgkit.git")
+                    }
                 }
             }
         }
     }
+}
+
+detekt {
+    buildUponDefaultConfig = true
+    config.setFrom(rootDir.resolve("detekt.yml"))
 }

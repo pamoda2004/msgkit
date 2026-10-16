@@ -12,10 +12,12 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
-private fun fixture(name: String): String =
-    File(System.getProperty("msgkit.fixtures"), name).readText(Charsets.UTF_8)
+private fun fixture(name: String): String = File(System.getProperty("msgkit.fixtures"), name).readText(Charsets.UTF_8)
 
-private fun hmacHex(secret: String, body: String): String {
+private fun hmacHex(
+    secret: String,
+    body: String,
+): String {
     val mac = Mac.getInstance("HmacSHA256")
     mac.init(SecretKeySpec(secret.toByteArray(), "HmacSHA256"))
     return mac.doFinal(body.toByteArray()).joinToString("") { "%02x".format(it) }
@@ -47,10 +49,11 @@ class MsgkitTest {
 
     @Test
     fun `options are applied`() {
-        val r = Msgkit.parseWhatsAppExport(
-            fixture("whatsapp_android_dmy.txt"),
-            WhatsAppExportOptions(selfName = "alice", utcOffsetMinutes = 330),
-        )
+        val r =
+            Msgkit.parseWhatsAppExport(
+                fixture("whatsapp_android_dmy.txt"),
+                WhatsAppExportOptions(selfName = "alice", utcOffsetMinutes = 330),
+            )
         assertEquals("2023-12-31T16:11:00Z", r.events[0].timestamp)
         assertEquals(Direction.OUTBOUND, r.events[0].direction)
         assertEquals(Direction.INBOUND, r.events[1].direction)
@@ -85,7 +88,11 @@ class MsgkitTest {
 
     @Test
     fun `Facebook export`() {
-        val r = Msgkit.parseFacebookExport(fixture("facebook_thread.json"), FacebookExportOptions(selfName = "Alice Perera"))
+        val r =
+            Msgkit.parseFacebookExport(
+                fixture("facebook_thread.json"),
+                FacebookExportOptions(selfName = "Alice Perera"),
+            )
         assertEquals(5, r.events.size)
         assertEquals("café ❤", r.messages[2].body)
         assertEquals(Direction.OUTBOUND, r.messages[2].direction)
@@ -95,22 +102,49 @@ class MsgkitTest {
 
     @Test
     fun `device batch`() {
-        val batch = DeviceBatch(
-            sms = listOf(
-                RawSms(address = "+94771234567", body = "Your code is 4821", dateMs = 1704067200000, kind = 1, threadId = "5"),
-                RawSms(address = "0771234567", body = "Thanks!", dateMs = 1704067260000, kind = 2),
-            ),
-            calls = listOf(
-                RawCall(number = "+94771234567", dateMs = 1704067400000, kind = 1, durationSecs = 60, name = "Kamal"),
-                RawCall(number = "0771234567", dateMs = 1704067500000, kind = 3),
-            ),
-        )
+        val batch =
+            DeviceBatch(
+                sms =
+                    listOf(
+                        RawSms(
+                            address = "+94771234567",
+                            body = "Your code is 4821",
+                            dateMs = 1704067200000,
+                            kind = 1,
+                            threadId = "5",
+                        ),
+                        RawSms(address = "0771234567", body = "Thanks!", dateMs = 1704067260000, kind = 2),
+                    ),
+                calls =
+                    listOf(
+                        RawCall(
+                            number = "+94771234567",
+                            dateMs = 1704067400000,
+                            kind = 1,
+                            durationSecs = 60,
+                            name = "Kamal",
+                        ),
+                        RawCall(number = "0771234567", dateMs = 1704067500000, kind = 3),
+                    ),
+            )
         val r = Msgkit.normalizeDevice(batch, DeviceOptions(ownNumber = "+94710000000", defaultCountryCode = "94"))
         assertEquals(2, r.messages.size)
-        assertEquals("+94771234567", r.messages[1].recipients.single().id)
+        assertEquals(
+            "+94771234567",
+            r.messages[1]
+                .recipients
+                .single()
+                .id,
+        )
         assertEquals(Direction.OUTBOUND, r.messages[1].direction)
         assertEquals(listOf(CallOutcome.ANSWERED, CallOutcome.MISSED), r.calls.map { it.outcome })
-        assertEquals("Kamal", r.calls[0].participants.single().displayName)
+        assertEquals(
+            "Kamal",
+            r.calls[0]
+                .participants
+                .single()
+                .displayName,
+        )
         assertTrue(r.calls.all { it.channel == Channel.CELLULAR })
     }
 
@@ -120,7 +154,13 @@ class MsgkitTest {
         assertEquals(3, wa.messages.size)
         assertEquals("wamid.AAA", wa.messages[0].externalId)
         assertEquals("Kamal", wa.messages[0].sender.displayName)
-        assertEquals("MEDIA1", wa.messages[1].attachments.single().sourceId)
+        assertEquals(
+            "MEDIA1",
+            wa.messages[1]
+                .attachments
+                .single()
+                .sourceId,
+        )
         assertTrue(wa.messages[0].raw != null)
 
         val ms = Msgkit.normalizeMessengerWebhook(fixture("messenger_webhook.json"))
@@ -173,7 +213,13 @@ class MsgkitTest {
         val line = "31/12/2023, 21:41 - Alice: some reasonably long message body to make the file big\n"
         val r = Msgkit.parseWhatsAppExport(line.repeat(50_000))
         assertEquals(50_000, r.events.size)
-        assertEquals(50_000, r.events.map { it.id }.toSet().size)
+        assertEquals(
+            50_000,
+            r.events
+                .map { it.id }
+                .toSet()
+                .size,
+        )
     }
 
     @Test
@@ -182,9 +228,10 @@ class MsgkitTest {
         val expected = Msgkit.parseWhatsAppExport(text)
         val pool = Executors.newFixedThreadPool(8)
         try {
-            val futures = (1..8).map {
-                pool.submit<Boolean> { (1..100).all { Msgkit.parseWhatsAppExport(text) == expected } }
-            }
+            val futures =
+                (1..8).map {
+                    pool.submit<Boolean> { (1..100).all { Msgkit.parseWhatsAppExport(text) == expected } }
+                }
             assertTrue(futures.all { it.get(60, TimeUnit.SECONDS) })
         } finally {
             pool.shutdownNow()

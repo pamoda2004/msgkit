@@ -16,15 +16,15 @@ Two artifacts, one API:
 
 | Artifact | Use it for | Native libraries |
 |---|---|---|
-| `dev.msgkit:msgkit` | JVM servers and desktop apps (Linux, macOS, Windows) | bundled in the JAR, extracted by JNA at run time |
-| `dev.msgkit:msgkit-android` | Android apps (API 26+) | `libmsgkit_ffi.so` for `arm64-v8a`, `armeabi-v7a`, `x86_64`, `x86` |
+| `io.github.pamoda2004:msgkit` | JVM servers and desktop apps (Linux, macOS, Windows) | bundled in the JAR, extracted by JNA at run time |
+| `io.github.pamoda2004:msgkit-android` | Android apps (API 26+) | `libmsgkit_ffi.so` for `arm64-v8a`, `armeabi-v7a`, `x86_64`, `x86` |
 
 ```kotlin
 // build.gradle.kts of a JVM app
-dependencies { implementation("dev.msgkit:msgkit:0.1.0") }
+dependencies { implementation("io.github.pamoda2004:msgkit:0.1.0") }
 
 // build.gradle.kts of an Android app
-dependencies { implementation("dev.msgkit:msgkit-android:0.1.0") }
+dependencies { implementation("io.github.pamoda2004:msgkit-android:0.1.0") }
 ```
 
 > The `dev.msgkit` group id is a placeholder. Change `group` in both `build.gradle.kts` files before publishing under your own namespace.

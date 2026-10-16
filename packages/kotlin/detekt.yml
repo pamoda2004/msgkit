@@ -1,0 +1,16 @@
+# Detekt rules on top of the defaults. Keep this file short; justify every exception.
+complexity:
+  TooManyFunctions:
+    # Msgkit is the public facade: one function per operation, by design.
+    allowedFunctionsPerObject: 15
+style:
+  MagicNumber:
+    active: true
+    excludes: ['**/test/**', '**/androidTest/**']
+  MaxLineLength:
+    maxLineLength: 120
+naming:
+  FunctionNaming:
+    # JNA binds the C functions by their exact names (msgkit_call, ...).
+    excludes: ['**/internal/NativeLib.kt']
+    ignoreAnnotated: ['Test']

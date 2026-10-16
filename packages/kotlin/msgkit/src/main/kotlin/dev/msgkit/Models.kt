@@ -1,9 +1,9 @@
 package dev.msgkit
 
-import java.time.Instant
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
+import java.time.Instant
 
 // Types mirror the JSON Schemas in `schema/` of the msgkit repository
 // (event.schema.json, import-report.schema.json, options.schema.json).
@@ -11,38 +11,70 @@ import kotlinx.serialization.json.JsonElement
 /** The network or transport a message or call travelled over. */
 @Serializable
 public enum class Channel {
-    @SerialName("sms") SMS,
-    @SerialName("cellular") CELLULAR,
-    @SerialName("whatsapp") WHATSAPP,
-    @SerialName("messenger") MESSENGER,
+    @SerialName("sms")
+    SMS,
+
+    @SerialName("cellular")
+    CELLULAR,
+
+    @SerialName("whatsapp")
+    WHATSAPP,
+
+    @SerialName("messenger")
+    MESSENGER,
 }
 
 /** Whether the account owner received or sent the item. */
 @Serializable
 public enum class Direction {
-    @SerialName("inbound") INBOUND,
-    @SerialName("outbound") OUTBOUND,
-    @SerialName("unknown") UNKNOWN,
+    @SerialName("inbound")
+    INBOUND,
+
+    @SerialName("outbound")
+    OUTBOUND,
+
+    @SerialName("unknown")
+    UNKNOWN,
 }
 
 /** How a call ended, from the account owner's point of view. */
 @Serializable
 public enum class CallOutcome {
-    @SerialName("answered") ANSWERED,
-    @SerialName("missed") MISSED,
-    @SerialName("rejected") REJECTED,
-    @SerialName("blocked") BLOCKED,
-    @SerialName("voicemail") VOICEMAIL,
-    @SerialName("unknown") UNKNOWN,
+    @SerialName("answered")
+    ANSWERED,
+
+    @SerialName("missed")
+    MISSED,
+
+    @SerialName("rejected")
+    REJECTED,
+
+    @SerialName("blocked")
+    BLOCKED,
+
+    @SerialName("voicemail")
+    VOICEMAIL,
+
+    @SerialName("unknown")
+    UNKNOWN,
 }
 
 @Serializable
 public enum class AttachmentKind {
-    @SerialName("image") IMAGE,
-    @SerialName("video") VIDEO,
-    @SerialName("audio") AUDIO,
-    @SerialName("file") FILE,
-    @SerialName("other") OTHER,
+    @SerialName("image")
+    IMAGE,
+
+    @SerialName("video")
+    VIDEO,
+
+    @SerialName("audio")
+    AUDIO,
+
+    @SerialName("file")
+    FILE,
+
+    @SerialName("other")
+    OTHER,
 }
 
 /** A person or address taking part in a conversation. */
@@ -139,9 +171,14 @@ public data class VersionInfo(
 @Serializable
 public enum class DateOrder {
     /** Inferred from the data; falls back to day-first with a warning. */
-    @SerialName("auto") AUTO,
-    @SerialName("dmy") DMY,
-    @SerialName("mdy") MDY,
+    @SerialName("auto")
+    AUTO,
+
+    @SerialName("dmy")
+    DMY,
+
+    @SerialName("mdy")
+    MDY,
 }
 
 @Serializable

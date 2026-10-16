@@ -36,9 +36,10 @@ class MsgkitAndroidTest {
 
     @Test
     fun whatsAppExport() {
-        val text = "31/12/2023, 21:41 - Alice: Happy new year!\n" +
-            "31/12/2023, 21:42 - Bob: Same to you\n" +
-            "01/01/2024, 00:10 - Missed voice call\n"
+        val text =
+            "31/12/2023, 21:41 - Alice: Happy new year!\n" +
+                "31/12/2023, 21:42 - Bob: Same to you\n" +
+                "01/01/2024, 00:10 - Missed voice call\n"
         val r = Msgkit.parseWhatsAppExport(text, WhatsAppExportOptions(selfName = "Alice", utcOffsetMinutes = 330))
         assertEquals(emptyList<String>(), r.warnings)
         assertEquals(2, r.messages.size)
@@ -53,17 +54,30 @@ class MsgkitAndroidTest {
         val body = "සිංහල 🎉 café \"quoted\""
         val r = Msgkit.parseWhatsAppExport("01/02/2024, 10:00 - සමන්: $body\n")
         assertEquals(body, r.messages.single().body)
-        assertEquals("සමන්", r.messages.single().sender.id)
+        assertEquals(
+            "සමන්",
+            r.messages
+                .single()
+                .sender.id,
+        )
     }
 
     @Test
     fun deviceRowsAndInstantHelper() {
-        val batch = DeviceBatch(
-            sms = listOf(RawSms(address = "0771234567", body = "Thanks!", dateMs = 1704067260000, kind = 2)),
-            calls = listOf(RawCall(number = "+94771234567", dateMs = 1704067400000, kind = 3)),
-        )
+        val batch =
+            DeviceBatch(
+                sms = listOf(RawSms(address = "0771234567", body = "Thanks!", dateMs = 1704067260000, kind = 2)),
+                calls = listOf(RawCall(number = "+94771234567", dateMs = 1704067400000, kind = 3)),
+            )
         val r = Msgkit.normalizeDevice(batch, DeviceOptions(ownNumber = "+94710000000", defaultCountryCode = "94"))
-        assertEquals("+94771234567", r.messages.single().recipients.single().id)
+        assertEquals(
+            "+94771234567",
+            r.messages
+                .single()
+                .recipients
+                .single()
+                .id,
+        )
         assertEquals(CallOutcome.MISSED, r.calls.single().outcome)
         assertEquals(java.time.Instant.parse("2024-01-01T00:01:00Z"), r.messages.single().instant)
     }
@@ -92,9 +106,10 @@ class MsgkitAndroidTest {
     fun manyThreads() {
         val text = "31/12/2023, 21:41 - Alice: hi\n".repeat(200)
         val expected = Msgkit.parseWhatsAppExport(text)
-        val threads = (1..4).map {
-            Thread { repeat(10) { assertEquals(expected, Msgkit.parseWhatsAppExport(text)) } }.also { it.start() }
-        }
+        val threads =
+            (1..4).map {
+                Thread { repeat(10) { assertEquals(expected, Msgkit.parseWhatsAppExport(text)) } }.also { it.start() }
+            }
         threads.forEach { it.join() }
     }
 }

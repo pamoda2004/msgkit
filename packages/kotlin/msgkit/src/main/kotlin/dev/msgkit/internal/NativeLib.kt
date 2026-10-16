@@ -14,7 +14,10 @@ import com.sun.jna.Pointer
 @Suppress("FunctionName", "ktlint:standard:function-naming")
 internal interface NativeLib : Library {
     /** Returns an owned, NUL-terminated UTF-8 JSON envelope; free it with [msgkit_free]. */
-    fun msgkit_call(op: ByteArray, inputJson: ByteArray): Pointer?
+    fun msgkit_call(
+        op: ByteArray,
+        inputJson: ByteArray,
+    ): Pointer?
 
     fun msgkit_free(s: Pointer)
 
@@ -34,9 +37,13 @@ internal object NativeBridge {
     private fun nulTerminated(s: String): ByteArray = s.toByteArray(Charsets.UTF_8) + 0
 
     /** Runs `op` and returns the JSON response envelope. Thread-safe. */
-    fun call(op: String, inputJson: String): String {
-        val result = lib.msgkit_call(nulTerminated(op), nulTerminated(inputJson))
-            ?: error("msgkit returned no result (allocation failure)")
+    fun call(
+        op: String,
+        inputJson: String,
+    ): String {
+        val result =
+            lib.msgkit_call(nulTerminated(op), nulTerminated(inputJson))
+                ?: error("msgkit returned no result (allocation failure)")
         try {
             return result.getString(0, "UTF-8")
         } finally {

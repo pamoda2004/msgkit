@@ -4,13 +4,17 @@ plugins {
     kotlin("jvm")
     kotlin("plugin.serialization")
     `maven-publish`
+    id("org.jlleitschuh.gradle.ktlint")
+    id("dev.detekt")
 }
 
 // The Kotlin package is released in lock-step with the Rust workspace.
-val workspaceVersion: String = Regex("""(?m)^version = "(.+)"$""")
-    .find(rootDir.resolve("../../Cargo.toml").readText())!!.groupValues[1]
+val workspaceVersion: String =
+    Regex("""(?m)^version = "(.+)"$""")
+        .find(rootDir.resolve("../../Cargo.toml").readText())!!
+        .groupValues[1]
 
-group = "dev.msgkit"
+group = "io.github.pamoda2004"
 version = workspaceVersion
 
 kotlin {
@@ -52,7 +56,10 @@ tasks.test {
     // Use the freshly built native library from the Cargo target directory.
     val libDirs = listOf("release", "debug").map { repo.resolve("target/$it") }.filter { it.isDirectory }
     systemProperty("jna.library.path", libDirs.joinToString(File.pathSeparator) { it.absolutePath })
-    testLogging { events("passed", "failed", "skipped"); showStandardStreams = false }
+    testLogging {
+        events("passed", "failed", "skipped")
+        showStandardStreams = false
+    }
 }
 
 publishing {
@@ -63,8 +70,29 @@ publishing {
             pom {
                 name.set("msgkit")
                 description.set("Import SMS, WhatsApp and Messenger messages and calls into one normalized model.")
-                licenses { license { name.set("MIT"); url.set("https://opensource.org/licenses/MIT") } }
+                url.set("https://github.com/pamoda2004/msgkit")
+                licenses {
+                    license {
+                        name.set("MIT")
+                        url.set("https://opensource.org/licenses/MIT")
+                    }
+                }
+                developers {
+                    developer {
+                        id.set("pamoda2004")
+                        name.set("Pamoda Jayathilaka")
+                    }
+                }
+                scm {
+                    url.set("https://github.com/pamoda2004/msgkit")
+                    connection.set("scm:git:https://github.com/pamoda2004/msgkit.git")
+                }
             }
         }
     }
+}
+
+detekt {
+    buildUponDefaultConfig = true
+    config.setFrom(rootDir.resolve("detekt.yml"))
 }

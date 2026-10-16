@@ -8,13 +8,13 @@ plugins {
 
 repositories {
     mavenLocal {
-        content { includeGroup("dev.msgkit") }
+        content { includeGroup("io.github.pamoda2004") }
     }
     mavenCentral()
 }
 
 dependencies {
-    implementation("dev.msgkit:msgkit:0.1.0")
+    implementation("io.github.pamoda2004:msgkit:0.1.0")
 }
 
 application {

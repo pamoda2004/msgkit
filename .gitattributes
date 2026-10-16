@@ -1,0 +1,16 @@
+# Normalize line endings: LF in the repository and on checkout, so scripts and
+# generated JSON Schemas behave the same on Windows, macOS and Linux CI.
+* text=auto eol=lf
+
+# Windows batch files need CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary files: never touch or diff as text.
+*.jar binary
+*.pdf binary
+*.png binary
+*.wasm binary
+*.so binary
+*.dll binary
+*.dylib binary

@@ -1,0 +1,202 @@
+openapi: 3.0.3
+info:
+  title: msgkit service
+  version: 0.1.0
+  description: >
+    HTTP sidecar for msgkit. Import endpoints convert user exports and device
+    rows into normalized events; webhook endpoints receive signed deliveries
+    from WhatsApp Business Cloud API and the Messenger Platform.
+    Event and option shapes are defined by the JSON Schemas in `schema/`.
+servers:
+  - url: http://127.0.0.1:8080
+security:
+  - bearer: []
+paths:
+  /healthz:
+    get:
+      summary: Liveness probe
+      security: []
+      responses:
+        "200": { description: OK, content: { text/plain: { schema: { type: string, example: ok } } } }
+  /v1/version:
+    get:
+      summary: Service and schema versions
+      responses:
+        "200":
+          description: Versions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  service_version: { type: string }
+                  schema_version: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /v1/import/whatsapp-export:
+    post:
+      summary: Parse a WhatsApp "Export chat" text file
+      parameters:
+        - { name: self_name, in: query, schema: { type: string }, description: The exporting user's name; sets direction }
+        - { name: date_order, in: query, schema: { type: string, enum: [auto, dmy, mdy], default: auto } }
+        - { name: utc_offset_minutes, in: query, schema: { type: integer, default: 0 } }
+        - { name: conversation_id, in: query, schema: { type: string } }
+        - { name: default_country_code, in: query, schema: { type: string }, description: "Digits, e.g. 94" }
+      requestBody:
+        required: true
+        content:
+          text/plain: { schema: { type: string } }
+      responses:
+        "200": { $ref: "#/components/responses/ImportReport" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /v1/import/facebook-export:
+    post:
+      summary: Parse one Messenger `message_N.json` file
+      parameters:
+        - { name: self_name, in: query, schema: { type: string } }
+        - { name: conversation_id, in: query, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { type: object } }
+      responses:
+        "200": { $ref: "#/components/responses/ImportReport" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /v1/import/device:
+    post:
+      summary: Normalize Android SMS and call-log rows
+      parameters:
+        - { name: own_number, in: query, schema: { type: string } }
+        - { name: default_country_code, in: query, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "schema/options.schema.json#/device_batch" }
+      responses:
+        "200": { $ref: "#/components/responses/ImportReport" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /v1/events:
+    get:
+      summary: Webhook events not yet acknowledged
+      description: >
+        Returns events received through webhooks that have not been
+        acknowledged, oldest arrival first. Stored in SQLite when the service
+        runs with MSGKIT_DB_PATH, otherwise in memory (lost on restart).
+        Process the events, then confirm them with POST /v1/events/ack.
+      parameters:
+        - { name: drain, in: query, schema: { type: boolean, default: false }, description: "List and acknowledge in one step (at-most-once: events are lost if your consumer crashes before processing them)" }
+      responses:
+        "200":
+          description: Events, oldest arrival first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "schema/event.schema.json" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "500": { $ref: "#/components/responses/Error" }
+  /v1/events/ack:
+    post:
+      summary: Mark events as consumed
+      description: >
+        Acknowledged events are no longer listed and their content is erased
+        from the database; their ids are kept for 30 days to reject redelivered
+        webhooks. Unknown or already-acknowledged ids are ignored.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids]
+              properties:
+                ids: { type: array, items: { type: string } }
+      responses:
+        "200":
+          description: Number of events newly acknowledged
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  acknowledged: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "500": { $ref: "#/components/responses/Error" }
+  /webhooks/whatsapp:
+    get:
+      summary: Meta subscription handshake
+      security: []
+      parameters: &handshake
+        - { name: hub.mode, in: query, schema: { type: string } }
+        - { name: hub.verify_token, in: query, schema: { type: string } }
+        - { name: hub.challenge, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Echoes hub.challenge, content: { text/plain: { schema: { type: string } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+    post:
+      summary: Signed WhatsApp Business Cloud API delivery
+      security: []
+      parameters:
+        - { name: X-Hub-Signature-256, in: header, required: true, schema: { type: string, example: "sha256=..." } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object } } }
+      responses:
+        "200": { $ref: "#/components/responses/WebhookAck" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /webhooks/messenger:
+    get:
+      summary: Meta subscription handshake
+      security: []
+      parameters: *handshake
+      responses:
+        "200": { description: Echoes hub.challenge, content: { text/plain: { schema: { type: string } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+    post:
+      summary: Signed Messenger Platform delivery
+      security: []
+      parameters:
+        - { name: X-Hub-Signature-256, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object } } }
+      responses:
+        "200": { $ref: "#/components/responses/WebhookAck" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+components:
+  securitySchemes:
+    bearer: { type: http, scheme: bearer, description: Required only when MSGKIT_API_TOKEN is set }
+  responses:
+    ImportReport:
+      description: Normalized events plus non-fatal warnings
+      content:
+        application/json:
+          schema: { $ref: "schema/import-report.schema.json" }
+    WebhookAck:
+      description: Accepted
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              accepted: { type: integer }
+              duplicates: { type: integer }
+              warnings: { type: array, items: { type: string } }
+    Unauthorized:
+      description: Missing or invalid bearer token
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Error:
+      description: Error
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: { type: string }

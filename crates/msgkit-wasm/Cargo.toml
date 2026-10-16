@@ -1,0 +1,17 @@
+[package]
+name = "msgkit-wasm"
+description = "WebAssembly build of msgkit-core for Node.js, browsers, Deno and Bun."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+# Unsafe code is required to hand buffers across the Wasm boundary, so this
+# crate does not inherit the workspace `unsafe_code = "forbid"` lint.
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+msgkit-core = { path = "../msgkit-core" }

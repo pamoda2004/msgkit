@@ -1,0 +1,61 @@
+plugins {
+    id("com.android.library")
+    `maven-publish`
+}
+
+val workspaceVersion: String = Regex("""(?m)^version = "(.+)"$""")
+    .find(rootDir.resolve("../../Cargo.toml").readText())!!.groupValues[1]
+
+group = "dev.msgkit"
+version = workspaceVersion
+
+android {
+    namespace = "dev.msgkit.android"
+    compileSdk = 36
+
+    defaultConfig {
+        // java.time (used by the Instant helpers) needs API 26 without desugaring.
+        minSdk = 26
+        consumerProguardFiles("consumer-rules.pro")
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
+    }
+
+    publishing {
+        singleVariant("release") { withSourcesJar() }
+    }
+}
+
+// This module only packages `libmsgkit_ffi.so` for each ABI (built into
+// src/main/jniLibs by scripts/build_android_libs.py) next to the pure-JVM
+// :msgkit module. On Android, JNA must come as an AAR (it carries its own
+// libjnidispatch.so), so the JVM flavour of JNA is excluded.
+dependencies {
+    api(project(":msgkit")) {
+        exclude(group = "net.java.dev.jna", module = "jna")
+    }
+    api("net.java.dev.jna:jna:5.17.0@aar")
+
+    androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
+}
+
+afterEvaluate {
+    publishing {
+        publications {
+            create<MavenPublication>("release") {
+                artifactId = "msgkit-android"
+                from(components["release"])
+                pom {
+                    name.set("msgkit for Android")
+                    description.set("msgkit with native libraries for Android (arm64-v8a, armeabi-v7a, x86_64, x86).")
+                    licenses { license { name.set("MIT"); url.set("https://opensource.org/licenses/MIT") } }
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,303 @@
+{
+  "$defs": {
+    "Attachment": {
+      "description": "A media item or file belonging to a message. msgkit records references,\nnever the bytes.",
+      "properties": {
+        "file_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "$ref": "#/$defs/AttachmentKind"
+        },
+        "mime_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_id": {
+          "description": "The platform's own media id, used to download the bytes via its API.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "uri": {
+          "description": "Location of the media, if the source provided one (URL or export path).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "type": "object"
+    },
+    "AttachmentKind": {
+      "enum": [
+        "image",
+        "video",
+        "audio",
+        "file",
+        "other"
+      ],
+      "type": "string"
+    },
+    "Call": {
+      "description": "A voice or video call.",
+      "properties": {
+        "channel": {
+          "$ref": "#/$defs/Channel"
+        },
+        "conversation_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "direction": {
+          "$ref": "#/$defs/Direction"
+        },
+        "duration_secs": {
+          "description": "Talk time in seconds; `0` for calls that were never answered.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "external_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "outcome": {
+          "$ref": "#/$defs/CallOutcome"
+        },
+        "participants": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Participant"
+          },
+          "type": "array"
+        },
+        "raw": true,
+        "timestamp": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "video": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "channel",
+        "direction",
+        "timestamp",
+        "duration_secs",
+        "outcome"
+      ],
+      "type": "object"
+    },
+    "CallOutcome": {
+      "description": "How a call ended, from the account owner's point of view.",
+      "enum": [
+        "answered",
+        "missed",
+        "rejected",
+        "blocked",
+        "voicemail",
+        "unknown"
+      ],
+      "type": "string"
+    },
+    "Channel": {
+      "description": "The network or transport a message or call travelled over.",
+      "oneOf": [
+        {
+          "enum": [
+            "whatsapp",
+            "messenger"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "sms",
+          "description": "Text messages (SMS/MMS) on a mobile device.",
+          "type": "string"
+        },
+        {
+          "const": "cellular",
+          "description": "Ordinary cellular voice calls.",
+          "type": "string"
+        }
+      ]
+    },
+    "Direction": {
+      "description": "Whether the account owner received or sent the item.",
+      "oneOf": [
+        {
+          "enum": [
+            "inbound",
+            "outbound"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "unknown",
+          "description": "The source did not contain enough information to tell.",
+          "type": "string"
+        }
+      ]
+    },
+    "Event": {
+      "description": "Anything msgkit can import.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/Message",
+          "properties": {
+            "type": {
+              "const": "message",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "$ref": "#/$defs/Call",
+          "properties": {
+            "type": {
+              "const": "call",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Message": {
+      "description": "A text or media message.",
+      "properties": {
+        "attachments": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Attachment"
+          },
+          "type": "array"
+        },
+        "body": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "channel": {
+          "$ref": "#/$defs/Channel"
+        },
+        "conversation_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "direction": {
+          "$ref": "#/$defs/Direction"
+        },
+        "external_id": {
+          "description": "The id the source platform assigned, when it has one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "Deterministic id: importing the same data twice yields the same id.",
+          "type": "string"
+        },
+        "raw": {
+          "description": "The untouched source payload, kept so records can be re-parsed later."
+        },
+        "recipients": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Participant"
+          },
+          "type": "array"
+        },
+        "sender": {
+          "$ref": "#/$defs/Participant"
+        },
+        "timestamp": {
+          "description": "Always UTC.",
+          "format": "date-time",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "channel",
+        "direction",
+        "timestamp",
+        "sender"
+      ],
+      "type": "object"
+    },
+    "Participant": {
+      "description": "A person or address taking part in a conversation.",
+      "properties": {
+        "display_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "Stable identifier. An E.164 phone number (`+94771234567`) when one is\nknown, otherwise the platform's own id or the display name.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result of an import: the events plus anything worth telling the user.",
+  "properties": {
+    "events": {
+      "items": {
+        "$ref": "#/$defs/Event"
+      },
+      "type": "array"
+    },
+    "warnings": {
+      "description": "Non-fatal problems, e.g. lines that could not be parsed.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "events",
+    "warnings"
+  ],
+  "title": "ImportReport",
+  "type": "object"
+}

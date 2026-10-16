@@ -1,0 +1,33 @@
+{
+  "name": "@msgkit/core",
+  "version": "0.1.0",
+  "description": "Import SMS, WhatsApp and Messenger messages and calls into one normalized model. Portable WebAssembly build; no native addons.",
+  "keywords": ["sms", "whatsapp", "messenger", "facebook", "import", "chat-export", "webhook", "wasm"],
+  "license": "MIT",
+  "type": "module",
+  "main": "./src/index.js",
+  "types": "./src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./msgkit.wasm": "./dist/msgkit.wasm",
+    "./package.json": "./package.json"
+  },
+  "imports": {
+    "#load": {
+      "node": "./src/load-node.js",
+      "default": "./src/load-browser.js"
+    }
+  },
+  "files": ["src", "dist/msgkit.wasm", "README.md", "LICENSE"],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test test/msgkit.test.mjs"
+  }
+}

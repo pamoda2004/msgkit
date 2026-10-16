@@ -1,0 +1,13 @@
+[package]
+name = "msgkit-consumer-rust"
+version = "1.0.0"
+edition = "2021"
+publish = false
+
+# This project is deliberately NOT part of the msgkit workspace: it consumes msgkit-core as an
+# ordinary dependency, exactly as an outside project would. (Until msgkit is published to
+# crates.io, depend on it by path or by git URL.)
+[workspace]
+
+[dependencies]
+msgkit-core = { path = "../../../crates/msgkit-core" }

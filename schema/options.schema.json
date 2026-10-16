@@ -1,0 +1,217 @@
+{
+  "device_batch": {
+    "$defs": {
+      "RawCall": {
+        "description": "A row from `CallLog.Calls`.",
+        "properties": {
+          "date_ms": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "duration_secs": {
+            "default": 0,
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "id": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "default": null,
+            "description": "Cached contact name, if any.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "number": {
+            "type": "string"
+          },
+          "type": {
+            "description": "`type` column: `1` incoming, `2` outgoing, `3` missed, `4` voicemail,\n`5` rejected, `6` blocked.",
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "number",
+          "date_ms",
+          "type"
+        ],
+        "type": "object"
+      },
+      "RawSms": {
+        "description": "A row from `Telephony.Sms`.",
+        "properties": {
+          "address": {
+            "description": "Remote party: a phone number or an alphanumeric sender id.",
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "date_ms": {
+            "description": "Milliseconds since the Unix epoch.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "default": null,
+            "description": "`_id` column, if available. Only stable on one device.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "thread_id": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "type": {
+            "description": "`type` column: `1` inbox, `2` sent. Other values map to `unknown`.",
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "address",
+          "body",
+          "date_ms",
+          "type"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "calls": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/RawCall"
+        },
+        "type": "array"
+      },
+      "sms": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/RawSms"
+        },
+        "type": "array"
+      }
+    },
+    "title": "DeviceBatch",
+    "type": "object"
+  },
+  "device_options": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "default_country_code": {
+        "default": null,
+        "description": "Calling code (digits) for national numbers such as `0771234567`.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "own_number": {
+        "default": null,
+        "description": "The device owner's own number, recorded as the other party of each\nmessage. Optional.",
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "title": "DeviceOptions",
+    "type": "object"
+  },
+  "facebook_export": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "conversation_id": {
+        "default": null,
+        "description": "Overrides the conversation id (defaults to the export's `thread_path`).",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "self_name": {
+        "default": null,
+        "description": "The exporting user's name, used to decide message direction.",
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "title": "FacebookExportOptions",
+    "type": "object"
+  },
+  "whatsapp_export": {
+    "$defs": {
+      "DateOrder": {
+        "oneOf": [
+          {
+            "enum": [
+              "dmy",
+              "mdy"
+            ],
+            "type": "string"
+          },
+          {
+            "const": "auto",
+            "description": "Infer from the file; falls back to day-first with a warning.",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "conversation_id": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "date_order": {
+        "$ref": "#/$defs/DateOrder",
+        "default": "auto"
+      },
+      "default_country_code": {
+        "default": null,
+        "description": "Calling code (digits, e.g. `\"94\"`) used to normalize sender names that\nare national phone numbers.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "self_name": {
+        "default": null,
+        "description": "The exporting user's name as it appears in the chat. Used to decide\nmessage direction; without it direction is `unknown`.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "utc_offset_minutes": {
+        "default": 0,
+        "description": "Offset of the phone's local time zone from UTC, in minutes\n(e.g. `330` for UTC+05:30). Defaults to `0`.",
+        "format": "int32",
+        "type": "integer"
+      }
+    },
+    "title": "WhatsAppExportOptions",
+    "type": "object"
+  }
+}

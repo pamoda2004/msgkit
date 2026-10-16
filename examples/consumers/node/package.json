@@ -1,0 +1,10 @@
+{
+  "name": "msgkit-consumer-node",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A separate Node.js project that uses @msgkit/core as an installed dependency.",
+  "scripts": {
+    "start": "node app.mjs"
+  }
+}

@@ -1,0 +1,18 @@
+[package]
+name = "msgkit-ffi"
+description = "C ABI for msgkit: a single JSON-in/JSON-out entry point usable from any language."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+# Unsafe code is unavoidable at an FFI boundary, so this crate does not inherit
+# the workspace `unsafe_code = "forbid"` lint. It is kept as small as possible.
+
+[lib]
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[dependencies]
+msgkit-core = { path = "../msgkit-core" }
+serde_json = "1.0.154"

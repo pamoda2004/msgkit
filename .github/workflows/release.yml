@@ -1,0 +1,198 @@
+name: Release
+
+# Push a tag like v0.1.0 (it must equal the version in Cargo.toml) to build and
+# publish every package. Nothing is published until the publish-* jobs run, and
+# those need the `pypi` / `npm` environments (with trusted publishing / an
+# NPM_TOKEN secret) to be configured in the repository settings.
+#
+# NOT automated: Maven Central. It needs a verified Sonatype namespace and GPG
+# signing. The Kotlin artifacts are built and attached to the GitHub release.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag matches the workspace version
+        run: |
+          version=$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)
+          test "v$version" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME != workspace version v$version"; exit 1; }
+
+  # Native library for every desktop platform (used by the Kotlin/JVM jar and attached to the release).
+  natives:
+    needs: check-version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-22.04, target: x86_64-unknown-linux-gnu, jna: linux-x86-64, lib: libmsgkit_ffi.so }
+          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, jna: linux-aarch64, lib: libmsgkit_ffi.so }
+          - { os: macos-latest, target: aarch64-apple-darwin, jna: darwin-aarch64, lib: libmsgkit_ffi.dylib }
+          - { os: macos-latest, target: x86_64-apple-darwin, jna: darwin-x86-64, lib: libmsgkit_ffi.dylib }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc, jna: win32-x86-64, lib: msgkit_ffi.dll }
+          - { os: windows-11-arm, target: aarch64-pc-windows-msvc, jna: win32-aarch64, lib: msgkit_ffi.dll }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - run: cargo build -p msgkit-ffi --release --locked --target ${{ matrix.target }}
+      - name: Stage library in JNA's resource layout
+        shell: bash
+        run: |
+          mkdir -p "natives/${{ matrix.jna }}"
+          cp "target/${{ matrix.target }}/release/${{ matrix.lib }}" "natives/${{ matrix.jna }}/"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.jna }}
+          path: natives
+
+  python-wheels:
+    needs: check-version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, target: x86_64-unknown-linux-gnu, plat: manylinux_2_28_x86_64, container: "quay.io/pypa/manylinux_2_28_x86_64" }
+          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, plat: manylinux_2_28_aarch64, container: "quay.io/pypa/manylinux_2_28_aarch64" }
+          - { os: macos-latest, target: aarch64-apple-darwin, plat: macosx_11_0_arm64, container: "" }
+          - { os: macos-latest, target: x86_64-apple-darwin, plat: macosx_10_12_x86_64, container: "" }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc, plat: win_amd64, container: "" }
+          - { os: windows-11-arm, target: aarch64-pc-windows-msvc, plat: win_arm64, container: "" }
+    runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
+    steps:
+      - uses: actions/checkout@v4
+      # Linux wheels are built inside a manylinux container for broad glibc compatibility.
+      - name: Rust (container)
+        if: matrix.container != ''
+        run: |
+          curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          echo "/opt/python/cp312-cp312/bin" >> "$GITHUB_PATH"
+      - uses: dtolnay/rust-toolchain@stable
+        if: matrix.container == ''
+        with:
+          targets: ${{ matrix.target }}
+      - uses: actions/setup-python@v5
+        if: matrix.container == ''
+        with:
+          python-version: "3.12"
+      - run: python -m pip install build
+      - run: python packages/python/scripts/build_wheel.py --target ${{ matrix.target }} --out dist
+        env:
+          MSGKIT_WHEEL_PLAT: ${{ matrix.plat }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.target }}
+          path: dist/*.whl
+
+  node:
+    needs: check-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node packages/node/scripts/build.mjs
+      - run: npm test
+        working-directory: packages/node
+      - run: npm pack
+        working-directory: packages/node
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-package
+          path: packages/node/*.tgz
+
+  kotlin:
+    needs: natives
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: native-*
+          path: packages/kotlin/msgkit/natives
+          merge-multiple: true
+      - run: python3 packages/kotlin/scripts/build_android_libs.py
+      - run: ./gradlew :msgkit:jar :msgkit:sourcesJar :msgkit-android:assembleRelease --console=plain
+        working-directory: packages/kotlin
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kotlin-artifacts
+          path: |
+            packages/kotlin/msgkit/build/libs/*.jar
+            packages/kotlin/msgkit-android/build/outputs/aar/*-release.aar
+
+  github-release:
+    needs: [natives, python-wheels, node, kotlin]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            artifacts/**/*.whl
+            artifacts/**/*.tgz
+            artifacts/**/*.jar
+            artifacts/**/*.aar
+
+  publish-pypi:
+    needs: github-release
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write # PyPI trusted publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheel-*
+          path: dist
+          merge-multiple: true
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  publish-npm:
+    needs: github-release
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write # npm provenance
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-package
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - run: npm publish --provenance --access public ./*.tgz
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

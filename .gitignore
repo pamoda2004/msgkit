@@ -1,0 +1,44 @@
+/target
+**/*.rs.bk
+.env
+.env.*
+*.ndjson
+__pycache__/
+*.pyc
+.idea/
+.vscode/
+.DS_Store
+# Real exports must never be committed.
+/private/
+
+# Language packages: generated and build output
+/packages/node/dist/
+/packages/node/LICENSE
+/packages/node/*.tgz
+/packages/python/dist/
+/packages/python/build/
+/packages/python/LICENSE
+/packages/python/src/msgkit/_lib/
+*.egg-info/
+/packages/kotlin/.gradle/
+/packages/kotlin/.kotlin/
+/packages/kotlin/build/
+/packages/kotlin/*/build/
+/packages/kotlin/local.properties
+/packages/kotlin/msgkit/natives/
+/packages/kotlin/msgkit-android/src/main/jniLibs/
+
+# Consumer example projects: dependencies and build output
+/examples/consumers/**/node_modules/
+/examples/consumers/**/package-lock.json
+/examples/consumers/**/.venv/
+/examples/consumers/**/target/
+/examples/consumers/**/build/
+/examples/consumers/**/.gradle/
+/examples/consumers/**/.kotlin/
+/examples/consumers/**/Cargo.lock
+/examples/consumers/**/*.tgz
+/examples/consumers/**/wheelhouse/
+
+# Generated PDFs are built from docs elsewhere and may contain example names; never commit them.
+/docs/*.pdf

@@ -5,13 +5,25 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
+homepage.workspace = true
 authors.workspace = true
 
 # Unsafe code is required to hand buffers across the Wasm boundary, so this
 # crate does not inherit the workspace `unsafe_code = "forbid"` lint.
 
+[lints.rust]
+unsafe_code = "allow"
+missing_debug_implementations = "warn"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
-msgkit-core = { path = "../msgkit-core" }
+msgkit-core.workspace = true

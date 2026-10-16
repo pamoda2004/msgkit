@@ -10,7 +10,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::id::{derive_id, Ordinals};
-use crate::model::*;
+use crate::model::{Call, CallOutcome, Channel, Direction, Event, ImportReport, Message, Participant};
 use crate::phone::normalize_phone;
 
 /// A row from `Telephony.Sms`.

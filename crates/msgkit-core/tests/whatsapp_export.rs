@@ -9,7 +9,7 @@ fn messages(r: &ImportReport) -> Vec<&Message> {
         .iter()
         .filter_map(|e| match e {
             Event::Message(m) => Some(m),
-            _ => None,
+            Event::Call(_) => None,
         })
         .collect()
 }
@@ -75,7 +75,7 @@ fn missed_call_notice_becomes_a_call() {
         .iter()
         .find_map(|e| match e {
             Event::Call(c) => Some(c),
-            _ => None,
+            Event::Message(_) => None,
         })
         .unwrap();
     assert_eq!(call.outcome, CallOutcome::Missed);
@@ -117,7 +117,7 @@ fn ambiguous_dates_warn_and_can_be_overridden() {
     assert_eq!(ts(messages(&auto)[0]), "2024-04-03T10:00:00Z");
 
     let mdy = parse(text, &WhatsAppExportOptions { date_order: DateOrder::Mdy, ..Default::default() });
-    assert!(mdy.warnings.is_empty());
+    assert_eq!(mdy.warnings, Vec::<String>::new());
     assert_eq!(ts(messages(&mdy)[0]), "2024-03-04T10:00:00Z");
 }
 
@@ -144,10 +144,10 @@ fn phone_number_senders_are_normalized() {
 #[test]
 fn garbage_input_yields_a_warning_not_a_panic() {
     let r = parse("this is not a chat export\nat all", &WhatsAppExportOptions::default());
-    assert!(r.events.is_empty());
-    assert!(!r.warnings.is_empty());
+    assert_eq!(r.events, []);
+    assert_ne!(r.warnings, Vec::<String>::new());
     let r = parse("", &WhatsAppExportOptions::default());
-    assert!(r.events.is_empty());
+    assert_eq!(r.events, []);
 }
 
 #[test]

@@ -23,6 +23,7 @@ pub enum Channel {
 }
 
 impl Channel {
+    #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
             Channel::Sms => "sms",
@@ -103,6 +104,7 @@ pub struct Attachment {
 }
 
 impl Attachment {
+    #[must_use]
     pub fn new(kind: AttachmentKind) -> Self {
         Attachment { kind, uri: None, mime_type: None, file_name: None, source_id: None }
     }
@@ -165,6 +167,7 @@ pub enum Event {
 }
 
 impl Event {
+    #[must_use]
     pub fn id(&self) -> &str {
         match self {
             Event::Message(m) => &m.id,
@@ -172,6 +175,7 @@ impl Event {
         }
     }
 
+    #[must_use]
     pub fn timestamp(&self) -> DateTime<Utc> {
         match self {
             Event::Message(m) => m.timestamp,
@@ -179,6 +183,7 @@ impl Event {
         }
     }
 
+    #[must_use]
     pub fn channel(&self) -> Channel {
         match self {
             Event::Message(m) => m.channel,
@@ -187,6 +192,7 @@ impl Event {
     }
 
     /// The `type` tag used in JSON: `"message"` or `"call"`.
+    #[must_use]
     pub fn kind(&self) -> &'static str {
         match self {
             Event::Message(_) => "message",

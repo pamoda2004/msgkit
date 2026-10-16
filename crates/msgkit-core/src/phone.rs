@@ -9,6 +9,7 @@
 ///
 /// `default_country_code` (digits only, e.g. `"94"`) is used for national
 /// numbers that start with a trunk prefix `0`.
+#[must_use]
 pub fn normalize_phone(raw: &str, default_country_code: Option<&str>) -> Option<String> {
     let cleaned: String = raw
         .chars()

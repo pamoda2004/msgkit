@@ -90,17 +90,17 @@ pub extern "C" fn msgkit_version() -> *const u8 {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Mutex;
+    use std::sync::{Mutex, PoisonError};
 
     use super::*;
 
     /// The wasm ABI keeps the last result length in a global (the real module
-    /// is single-threaded), so tests that call msgkit_call must not overlap.
+    /// is single-threaded), so tests that call `msgkit_call` must not overlap.
     static SERIAL: Mutex<()> = Mutex::new(());
 
     #[test]
     fn call_round_trip_and_free() {
-        let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = SERIAL.lock().unwrap_or_else(PoisonError::into_inner);
         let (op, input) = (b"version", b"{}");
         // SAFETY: valid slices; result freed once with its reported length.
         unsafe {
@@ -120,7 +120,7 @@ mod tests {
 
     #[test]
     fn invalid_utf8_is_an_error_envelope() {
-        let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = SERIAL.lock().unwrap_or_else(PoisonError::into_inner);
         let bad = [0xffu8, 0xfe];
         unsafe {
             let out = msgkit_call(bad.as_ptr(), bad.len(), b"{}".as_ptr(), 2);

@@ -16,11 +16,14 @@ use sha2::Sha256;
 
 use crate::error::{Error, Result};
 use crate::id::derive_id;
-use crate::model::*;
+use crate::model::{
+    Attachment, AttachmentKind, Channel, Direction, Event, ImportReport, Message, Participant,
+};
 
 type HmacSha256 = Hmac<Sha256>;
 
 /// Checks an `X-Hub-Signature-256` header against the raw body, in constant time.
+#[must_use]
 pub fn verify_signature(app_secret: &[u8], body: &[u8], header: &str) -> bool {
     let Some(hex_sig) = header.trim().strip_prefix("sha256=") else {
         return false;
@@ -37,6 +40,7 @@ pub fn verify_signature(app_secret: &[u8], body: &[u8], header: &str) -> bool {
 
 /// Computes the header value Meta would send. Useful for tests and for
 /// clients that simulate webhooks.
+#[must_use]
 pub fn sign(app_secret: &[u8], body: &[u8]) -> String {
     let mut mac = HmacSha256::new_from_slice(app_secret).expect("HMAC accepts any key length");
     mac.update(body);

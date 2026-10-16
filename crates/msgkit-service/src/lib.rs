@@ -118,6 +118,7 @@ impl AppState {
     }
 
     /// Uses a caller-provided store (any [`EventStore`] implementation).
+    #[must_use]
     pub fn with_store(config: Config, store: Box<dyn EventStore + Send>) -> Self {
         AppState { config: Arc::new(config), store: Arc::new(Mutex::new(store)) }
     }
@@ -157,6 +158,8 @@ impl IntoResponse for ApiError {
     }
 }
 
+// Takes the message by value because it is also used directly as `map_err(bad_request)`.
+#[allow(clippy::needless_pass_by_value)]
 fn bad_request(msg: impl ToString) -> ApiError {
     ApiError(StatusCode::BAD_REQUEST, msg.to_string())
 }

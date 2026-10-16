@@ -16,7 +16,10 @@ use serde_json::Value;
 
 use crate::error::{Error, Result};
 use crate::id::{derive_id, Ordinals};
-use crate::model::*;
+use crate::model::{
+    Attachment, AttachmentKind, Call, CallOutcome, Channel, Direction, Event, ImportReport, Message,
+    Participant,
+};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
@@ -33,8 +36,8 @@ struct Thread {
     participants: Vec<Person>,
     #[serde(default)]
     messages: Vec<FbMessage>,
-    #[serde(default)]
-    thread_path: Option<String>,
+    #[serde(default, rename = "thread_path")]
+    path: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -81,6 +84,7 @@ struct FbMessage {
 
 /// Repairs Facebook's Latin-1-escaped UTF-8. Returns the input unchanged if it
 /// is not mojibake (plain ASCII, or text that is genuinely non-Latin-1).
+#[must_use]
 pub fn fix_encoding(s: &str) -> String {
     let mut bytes = Vec::with_capacity(s.len());
     for c in s.chars() {
@@ -117,7 +121,7 @@ fn media(items: &[Media], kind: AttachmentKind, out: &mut Vec<Attachment>) {
 fn build(thread: Thread, opts: &FacebookExportOptions) -> ImportReport {
     let mut report = ImportReport::default();
     let mut ordinals = Ordinals::default();
-    let conversation_id = opts.conversation_id.clone().or_else(|| thread.thread_path.clone());
+    let conversation_id = opts.conversation_id.clone().or_else(|| thread.path.clone());
     let participants: Vec<String> = thread.participants.iter().map(|p| fix_encoding(&p.name)).collect();
     let mut skipped = 0usize;
 

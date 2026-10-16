@@ -8,7 +8,7 @@ fn calls(r: &ImportReport) -> Vec<&Call> {
         .iter()
         .filter_map(|e| match e {
             Event::Call(c) => Some(c),
-            _ => None,
+            Event::Message(_) => None,
         })
         .collect()
 }
@@ -18,7 +18,7 @@ fn messages(r: &ImportReport) -> Vec<&Message> {
         .iter()
         .filter_map(|e| match e {
             Event::Message(m) => Some(m),
-            _ => None,
+            Event::Call(_) => None,
         })
         .collect()
 }
@@ -76,7 +76,7 @@ fn whatsapp_webhook_messages() {
     assert_eq!(msgs[0].body.as_deref(), Some("Hello"));
     assert_eq!(msgs[0].sender.id, "+94771234567");
     assert_eq!(msgs[0].sender.display_name.as_deref(), Some("Kamal"));
-    assert_eq!(msgs[0].recipients[0].id, "+15550001111");
+    assert_eq!(msgs[0].recipients[0].id, "+15550100111");
     assert_eq!(msgs[0].direction, Direction::Inbound);
     assert_eq!(msgs[0].external_id.as_deref(), Some("wamid.AAA"));
     assert!(msgs[0].raw.is_some());
@@ -123,7 +123,7 @@ fn device_sms_and_calls() {
     let opts =
         DeviceOptions { own_number: Some("+94710000000".into()), default_country_code: Some("94".into()) };
     let r = device::normalize(&batch, &opts);
-    assert!(r.warnings.is_empty());
+    assert_eq!(r.warnings, Vec::<String>::new());
 
     let msgs = messages(&r);
     assert_eq!(msgs.len(), 3);
@@ -166,7 +166,7 @@ fn device_invalid_timestamps_are_reported() {
     )
     .unwrap();
     let r = device::normalize(&batch, &DeviceOptions::default());
-    assert!(r.events.is_empty());
+    assert_eq!(r.events, []);
     assert_eq!(r.warnings.len(), 1);
 }
 

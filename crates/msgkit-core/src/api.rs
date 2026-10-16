@@ -107,6 +107,7 @@ fn run(op: &str, input: &str) -> Result<Value> {
 
 /// Runs `op` with a JSON `input` document and returns the JSON envelope as a
 /// string. Never panics on bad input.
+#[must_use]
 pub fn dispatch(op: &str, input: &str) -> String {
     let envelope = match run(op, input) {
         Ok(data) => json!({ "ok": true, "data": data }),

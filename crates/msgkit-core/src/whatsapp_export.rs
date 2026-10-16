@@ -22,7 +22,10 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::id::{derive_id, Ordinals};
-use crate::model::*;
+use crate::model::{
+    Attachment, AttachmentKind, Call, CallOutcome, Channel, Direction, Event, ImportReport, Message,
+    Participant,
+};
 use crate::phone::normalize_phone;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
@@ -124,18 +127,18 @@ fn resolve_order(entries: &[Entry], requested: DateOrder, warnings: &mut Vec<Str
 }
 
 fn parse_timestamp(h: &Header, order: DateOrder, offset: FixedOffset) -> Option<chrono::DateTime<Utc>> {
-    let (a, b, c) = split_date(&h.date)?;
-    let (year, month, day) = if a.len() == 4 {
-        (a.parse::<i32>().ok()?, b.parse::<u32>().ok()?, c.parse::<u32>().ok()?)
+    let (first, second, third) = split_date(&h.date)?;
+    let (year, month, day) = if first.len() == 4 {
+        (first.parse::<i32>().ok()?, second.parse::<u32>().ok()?, third.parse::<u32>().ok()?)
     } else {
-        let mut year = c.parse::<i32>().ok()?;
-        if c.len() <= 2 {
+        let mut year = third.parse::<i32>().ok()?;
+        if third.len() <= 2 {
             year += 2000;
         }
-        let (a, b) = (a.parse::<u32>().ok()?, b.parse::<u32>().ok()?);
+        let (x, y) = (first.parse::<u32>().ok()?, second.parse::<u32>().ok()?);
         match order {
-            DateOrder::Mdy => (year, a, b),
-            _ => (year, b, a),
+            DateOrder::Mdy => (year, x, y),
+            _ => (year, y, x),
         }
     };
 
@@ -210,6 +213,7 @@ fn call_from_system_text(text: &str) -> Option<bool> {
 }
 
 /// Parses the contents of a WhatsApp chat export.
+#[must_use]
 pub fn parse(text: &str, opts: &WhatsAppExportOptions) -> ImportReport {
     let mut report = ImportReport::default();
     let [android, ios] = header_regexes();

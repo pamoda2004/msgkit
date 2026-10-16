@@ -1,0 +1,2 @@
+# Words that clippy::doc_markdown should treat as ordinary prose, not identifiers needing backticks.
+doc-valid-idents = ["..", "WhatsApp"]

@@ -66,6 +66,7 @@ pub struct MemoryStore {
 }
 
 impl MemoryStore {
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -116,8 +117,9 @@ pub mod conformance {
     use chrono::DateTime;
 
     use super::EventStore;
-    use crate::model::*;
+    use crate::model::{Attachment, AttachmentKind, Channel, Direction, Event, Message, Participant};
 
+    #[must_use]
     pub fn sample_event(id: &str, secs: i64) -> Event {
         Event::Message(Message {
             id: id.into(),
@@ -127,7 +129,7 @@ pub mod conformance {
             direction: Direction::Inbound,
             timestamp: DateTime::from_timestamp(secs, 0).unwrap(),
             sender: Participant::with_name("+94771234567", "Kamal"),
-            recipients: vec![Participant::new("+15550001111")],
+            recipients: vec![Participant::new("+15550100111")],
             body: Some(format!("body of {id} සිංහල 🎉")),
             attachments: vec![Attachment::new(AttachmentKind::Image)],
             raw: Some(serde_json::json!({"k": [1, 2, {"x": null}]})),
@@ -172,11 +174,11 @@ pub mod conformance {
         let drained = s.drain().unwrap();
         assert_eq!(drained.len(), 3);
         assert_eq!(s.len().unwrap(), 0);
-        assert!(s.list().unwrap().is_empty());
+        assert_eq!(s.list().unwrap(), []);
         assert!(!s.insert(sample_event("a", 1)).unwrap(), "drained ids must stay deduplicated");
         assert!(s.insert(sample_event("d", 4)).unwrap());
         assert_eq!(s.drain().unwrap().len(), 1);
-        assert!(s.drain().unwrap().is_empty());
+        assert_eq!(s.drain().unwrap(), []);
 
         // Acknowledging removes only the named events, counts only real ones,
         // and keeps dedupe memory.

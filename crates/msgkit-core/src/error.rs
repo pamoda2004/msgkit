@@ -21,6 +21,7 @@ pub enum Error {
 
 impl Error {
     /// A stable, machine-readable code for non-Rust consumers.
+    #[must_use]
     pub fn code(&self) -> &'static str {
         match self {
             Error::InvalidInput(_) => "invalid_input",

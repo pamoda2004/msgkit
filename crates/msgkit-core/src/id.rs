@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use sha2::{Digest, Sha256};
 
 /// Hashes `parts` into a 32-character hex id.
+#[must_use]
 pub fn derive_id(parts: &[&str]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(b"msgkit:v1");

@@ -141,7 +141,7 @@ async fn signed_webhook_is_stored_deduplicated_and_drainable() {
     let (_, b) = send(&app, Request::get("/v1/events?drain=true").body(Body::empty()).unwrap()).await;
     assert_eq!(json_of(&b).as_array().unwrap().len(), 3);
     let (_, b) = send(&app, Request::get("/v1/events").body(Body::empty()).unwrap()).await;
-    assert!(json_of(&b).as_array().unwrap().is_empty());
+    assert_eq!(json_of(&b).as_array().unwrap().len(), 0);
 }
 
 fn signed_wa_post() -> Request<Body> {
@@ -232,7 +232,7 @@ async fn drain_still_works_on_the_durable_store() {
     let (_, b) = send(&app, get("/v1/events?drain=true")).await;
     assert_eq!(ids_of(&b).len(), 3);
     let (_, b) = send(&app, get("/v1/events")).await;
-    assert!(ids_of(&b).is_empty());
+    assert_eq!(ids_of(&b), Vec::<String>::new());
 }
 
 #[tokio::test]
@@ -251,7 +251,7 @@ fn unusable_db_path_fails_at_startup() {
 #[tokio::test]
 async fn messenger_webhook() {
     let body = json!({"object":"page","entry":[{"id":"P","messaging":[
-        {"sender":{"id":"U"},"recipient":{"id":"P"},"timestamp":1704067200000i64,"message":{"mid":"m1","text":"yo"}}
+        {"sender":{"id":"U"},"recipient":{"id":"P"},"timestamp":1_704_067_200_000_i64,"message":{"mid":"m1","text":"yo"}}
     ]}]})
     .to_string();
     let req = Request::post("/webhooks/messenger")

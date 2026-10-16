@@ -5,6 +5,8 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
+homepage.workspace = true
 authors.workspace = true
 
 [lints]
@@ -16,8 +18,8 @@ path = "src/main.rs"
 
 [dependencies]
 axum = "0.8.9"
-msgkit-core = { path = "../msgkit-core" }
-msgkit-store-sqlite = { version = "0.1.0", path = "../msgkit-store-sqlite" }
+msgkit-core.workspace = true
+msgkit-store-sqlite.workspace = true
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 tokio = { version = "1.53.3", features = ["rt-multi-thread", "macros", "signal", "net"] }

@@ -1,0 +1,4 @@
+#!/bin/sh
+# Blocks commits that would add real exports or personal data. Enable with:
+#   git config core.hooksPath scripts/hooks
+exec python scripts/check_repo_hygiene.py

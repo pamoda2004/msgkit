@@ -8,6 +8,9 @@ out of it. Only synthetic data may live under the allow-listed fixture directori
     python scripts/check_repo_hygiene.py            # tracked files + untracked, non-ignored files
     python scripts/check_repo_hygiene.py --tracked  # only files known to git
 
+An optional local file (.git/hygiene-terms.txt, never committed) can list private words, such as the names of
+people in a private test chat, that must not appear anywhere.
+
 Output never contains the offending text: only the rule, the path and the line number, so a CI
 log can not itself leak the data it detected.
 """
@@ -193,6 +196,35 @@ def scan_file(root: Path, rel: str) -> Iterator[Violation]:
     yield from scan_text(rel, text)
 
 
+def load_private_terms(path: Path) -> list[str]:
+    """Reads an optional, local-only list of words that must never appear in the repository
+    (for example the names of people in a private test chat). One term per line; `#` starts a comment."""
+    if not path.is_file():
+        return []
+    lines = path.read_text(encoding="utf-8").splitlines()
+    return [ln.strip().lower() for ln in lines if ln.strip() and not ln.lstrip().startswith("#")]
+
+
+def scan_private_terms(root: Path, files: Iterable[str], terms: list[str]) -> list[Violation]:
+    """Flags any occurrence of a private term. The term itself is never printed."""
+    found: list[Violation] = []
+    if not terms:
+        return found
+    for rel in files:
+        path = root / rel
+        if path.suffix.lower() in TEXT_SUFFIXES_SKIPPED or not path.is_file():
+            continue
+        try:
+            text = path.read_bytes().decode("utf-8", errors="replace")
+        except OSError:
+            continue
+        for number, line in enumerate(text.splitlines(), start=1):
+            lowered = line.lower()
+            if any(term in lowered for term in terms):
+                found.append(Violation("private-term", rel, number))
+    return found
+
+
 def git_files(root: Path, tracked_only: bool) -> list[str]:
     cmd = ["git", "ls-files", "-z"]
     if not tracked_only:
@@ -212,11 +244,16 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--root", default=".", help="repository root (default: current directory)")
     parser.add_argument("--tracked", action="store_true", help="check only files tracked by git")
+    parser.add_argument(
+        "--terms-file",
+        help="local list of private words to reject (default: .git/hygiene-terms.txt if it exists)",
+    )
     args = parser.parse_args(argv)
 
     root = Path(args.root).resolve()
     files = git_files(root, args.tracked)
-    violations = scan(root, files)
+    terms_path = Path(args.terms_file) if args.terms_file else root / ".git" / "hygiene-terms.txt"
+    violations = scan(root, files) + scan_private_terms(root, files, load_private_terms(terms_path))
     if violations:
         print(f"Repository hygiene check FAILED: {len(violations)} finding(s). Text is intentionally not printed.")
         for v in violations:

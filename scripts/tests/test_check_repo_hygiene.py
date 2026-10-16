@@ -99,6 +99,23 @@ class PersonalIdentifiers(unittest.TestCase):
         self.assertEqual(rules("a.rs", "let t = 1704067200000; // 2024-01-01 abcdef0123456789abcdef0123456789"), set())
 
 
+class PrivateTerms(unittest.TestCase):
+    def test_terms_are_matched_case_insensitively_and_never_printed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "notes.md").write_text("Met Zanzibar Quimby today\nnothing here\n", encoding="utf-8")
+            terms_file = root / "terms.txt"
+            terms_file.write_text("# private names\nZANZIBAR quimby\n\n", encoding="utf-8")
+            terms = hygiene.load_private_terms(terms_file)
+            found = hygiene.scan_private_terms(root, ["notes.md"], terms)
+        self.assertEqual([(v.rule, v.line) for v in found], [("private-term", 1)])
+        self.assertNotIn("quimby", "\n".join(str(v) for v in found).lower())
+
+    def test_missing_terms_file_means_no_findings(self) -> None:
+        self.assertEqual(hygiene.load_private_terms(Path("does-not-exist.txt")), [])
+        self.assertEqual(hygiene.scan_private_terms(Path(), ["x"], []), [])
+
+
 class Behaviour(unittest.TestCase):
     def test_output_never_contains_the_offending_text(self) -> None:
         secret = "someone.private@" + "gmail" + ".com"

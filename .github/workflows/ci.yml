@@ -4,127 +4,317 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: "17 4 * * 1" # weekly: advisories and new lints appear without any code change
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings
+  RUST_VERSION: "1.99.0" # keep in sync with rust-toolchain.toml
+  # Minimum line coverage for msgkit-core. May only be raised.
+  COVERAGE_MIN_LINES: "90"
 
+# Actions are pinned to commit SHAs (the comment names the release); Dependabot keeps them current.
 jobs:
-  lint:
+  hygiene:
+    name: Repository hygiene (no personal data)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
+          python-version: "3.12"
+      - run: python scripts/check_repo_hygiene.py --tracked
+      - run: python -m unittest discover -s scripts/tests -v
+
+  rust-lint:
+    name: Rust lint (fmt, clippy pedantic)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
           components: clippy, rustfmt
           targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - run: cargo fmt --all --check
-      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       # The wasm crate must also be clean for its real target.
-      - run: cargo clippy -p msgkit-wasm --target wasm32-unknown-unknown -- -D warnings
+      - run: cargo clippy -p msgkit-wasm --target wasm32-unknown-unknown --locked -- -D warnings
 
-  test:
+  rust-test:
+    name: Rust tests (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo test --workspace
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - run: cargo test --workspace --locked
       # The committed JSON Schemas must match the Rust types.
-      - run: cargo test -p msgkit-core --test schema
+      - run: cargo test -p msgkit-core --test schema --locked
 
   msrv:
+    name: Rust MSRV (1.85)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.85
-      - run: cargo check --workspace --all-targets --locked
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: "1.85"
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      # rust-toolchain.toml pins the project toolchain; override it for this job only.
+      - run: cargo +1.85 check --workspace --all-targets --locked
 
-  node:
+  coverage:
+    name: Coverage (msgkit-core)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+        with:
+          tool: cargo-llvm-cov
+      - name: Measure
+        run: |
+          cargo llvm-cov -p msgkit-core --locked --no-report
+          cargo llvm-cov report --lcov --output-path lcov.info
+          cargo llvm-cov report --json --summary-only --output-path coverage.json
+      - name: Enforce the minimum
+        run: |
+          pct=$(python3 -c "import json; print(round(json.load(open('coverage.json'))['data'][0]['totals']['lines']['percent'], 2))")
+          echo "::notice title=msgkit-core line coverage::${pct}% (minimum ${COVERAGE_MIN_LINES}%)"
+          python3 - "$pct" "$COVERAGE_MIN_LINES" <<'PY'
+          import sys
+          pct, minimum = float(sys.argv[1]), float(sys.argv[2])
+          if pct < minimum:
+              print(f"::error title=Coverage below minimum::msgkit-core line coverage {pct}% is below {minimum}%")
+              sys.exit(1)
+          PY
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: coverage
+          path: |
+            lcov.info
+            coverage.json
+
+  semver:
+    name: API and schema compatibility
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # tags and history are the comparison baseline
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+        with:
+          tool: cargo-semver-checks
+      - name: Pick the baseline
+        id: base
+        run: |
+          # Pull requests compare to their base; pushes to the previous commit; first runs to the baseline tag.
+          base="${{ github.event.pull_request.base.sha || github.event.before }}"
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            base="baseline-prototype"
+          fi
+          echo "ref=$base" >> "$GITHUB_OUTPUT"
+          echo "Comparing against $base"
+      - name: Rust public API (semver)
+        # The released-API baseline is the tagged prototype until the first real release exists.
+        run: cargo semver-checks --workspace --baseline-rev baseline-prototype
+      - name: JSON Schema compatibility
+        run: python scripts/schema_compat.py --base-ref "${{ steps.base.outputs.ref }}"
+
+  supply-chain:
+    name: Advisories and licences
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+        with:
+          tool: cargo-audit,cargo-deny
+      - run: cargo audit
+      - run: cargo deny check
+      - run: npm audit --audit-level=moderate
+        working-directory: packages/node
+      - run: |
+          python -m pip install pip-audit
+          pip-audit -r requirements-dev.txt
+
+  python-lint:
+    name: Python lint (ruff, mypy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: mypy
+
+  python-test:
+    name: Python ${{ matrix.python }} (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
-        node: [20, 22, 24]
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+      - run: cargo build -p msgkit-ffi --locked
+      - run: python -m unittest discover -s packages/python/tests -v
+        env:
+          PYTHONPATH: packages/python/src
+      # Build the wheel, install it into a clean venv and test *that* (one interpreter per OS is enough).
+      - name: Wheel test
+        if: matrix.python == '3.12'
+        run: |
+          python -m pip install build
+          python packages/python/scripts/test_wheel.py
+
+  node:
+    name: Node.js ${{ matrix.node }}
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 21, 22, 23, 24]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
+          toolchain: ${{ env.RUST_VERSION }}
           targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-node@v4
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ matrix.node }}
       - run: node packages/node/scripts/build.mjs
+      - run: npm ci
+        working-directory: packages/node
+      - run: npm run lint
+        working-directory: packages/node
+      - run: npm run typecheck
+        working-directory: packages/node
       - run: npm test
         working-directory: packages/node
       - run: npm pack --dry-run
         working-directory: packages/node
 
-  python:
+  kotlin-jvm:
+    name: Kotlin JVM (JDK ${{ matrix.java }}, ${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        python: ["3.9", "3.13"]
+        include:
+          - { os: ubuntu-latest, java: 17 }
+          - { os: ubuntu-latest, java: 21 }
+          - { os: windows-latest, java: 21 }
+          - { os: macos-latest, java: 21 }
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
-          python-version: ${{ matrix.python }}
-      - run: cargo build -p msgkit-ffi
-      - run: python -m unittest discover -s packages/python/tests -v
-        env:
-          PYTHONPATH: packages/python/src
-      # Build the wheel, install it into a clean venv and test *that*.
-      - run: python -m pip install build
-      - run: python packages/python/scripts/test_wheel.py
-
-  kotlin-jvm:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-java@v4
+          toolchain: ${{ env.RUST_VERSION }}
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
-          java-version: 21
-      - run: cargo build -p msgkit-ffi --release
-      - run: ./gradlew :msgkit:test --console=plain
+          java-version: ${{ matrix.java }}
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+      - run: cargo build -p msgkit-ffi --release --locked
+      - name: ktlint, detekt and tests
+        run: ./gradlew :msgkit:ktlintCheck :msgkit:detekt :msgkit:test --console=plain
         working-directory: packages/kotlin
+        shell: bash
 
   android:
+    name: Android (build and emulator tests)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
+          toolchain: ${{ env.RUST_VERSION }}
           targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
-      - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-java@v4
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
           java-version: 21
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
       - name: Enable KVM for the emulator
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - run: python3 packages/kotlin/scripts/build_android_libs.py
-      - run: ./gradlew :msgkit-android:assembleRelease --console=plain
+      - run: ./gradlew :msgkit-android:ktlintCheck :msgkit-android:assembleRelease --console=plain
         working-directory: packages/kotlin
       - name: Instrumented tests on an emulator
-        uses: reactivecircus/android-emulator-runner@v2
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           api-level: 34
           arch: x86_64
           script: cd packages/kotlin && ./gradlew :msgkit-android:connectedDebugAndroidTest --console=plain
+
+  # Weekly canary: does the newest stable Rust (new clippy lints) still pass? Never blocks a change.
+  rust-latest-stable:
+    name: Rust latest stable (canary)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: stable
+          components: clippy
+      - run: cargo +stable clippy --workspace --all-targets -- -D warnings
+      - run: cargo +stable test --workspace

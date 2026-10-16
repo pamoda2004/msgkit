@@ -42,3 +42,10 @@ __pycache__/
 
 # Generated PDFs are built from docs elsewhere and may contain example names; never commit them.
 /docs/*.pdf
+
+node_modules/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+/coverage/
+/lcov.info

@@ -28,7 +28,7 @@
 * **`msgkit-service`** exposes the same operations over HTTP for stacks where loading a native library is impractical (JVM backends, serverless, other containers) and hosts webhook receivers.
 * **`msgkit-cli`** is for scripting and for trying things out.
 * **`msgkit-wasm`** is the same `dispatch` compiled to WebAssembly with a five-function, import-free ABI. It needs no generated glue, runs unchanged in Node, browsers, Deno and Bun, and avoids per-platform native binaries for JavaScript users.
-* **`packages/`** holds the idiomatic wrappers: `@msgkit/core` (JS over the wasm module), `msgkit` (Python over `msgkit-ffi` with ctypes) and `msgkit` / `msgkit-android` (Kotlin over `msgkit-ffi` with JNA). They contain **no parsing logic**: they serialize options to JSON, call `dispatch`, and decode the JSON into language-native types. That is why every language gives byte-identical results, and why a new operation added to `api::dispatch` becomes available everywhere by adding one small function per package.
+* **`packages/`** holds the idiomatic wrappers: `@pamoda2004/msgkit` (JS over the wasm module), `msgkit` (Python over `msgkit-ffi` with ctypes) and `msgkit` / `msgkit-android` (Kotlin over `msgkit-ffi` with JNA). They contain **no parsing logic**: they serialize options to JSON, call `dispatch`, and decode the JSON into language-native types. That is why every language gives byte-identical results, and why a new operation added to `api::dispatch` becomes available everywhere by adding one small function per package.
 
 ### Why a different backend per language
 

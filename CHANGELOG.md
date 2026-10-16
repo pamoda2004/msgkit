@@ -4,11 +4,24 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 
 ## [Unreleased]
 
+### Added (quality gates, Phase 1)
+- CI matrix: Rust on Linux, macOS and Windows; Python 3.9 to 3.13 on all three; Node.js 20 to 24; Kotlin on JDK 17 and 21 (plus Windows and macOS); Android emulator tests; weekly advisory run and a newest-Rust canary. All actions are pinned to commit SHAs.
+- Gates: `rustfmt`, `clippy::pedantic` as errors, `ruff` and `mypy` (strict) for Python, `eslint` and `tsc --noEmit` (strict) for Node.js, `ktlint` and `detekt` for Kotlin, `cargo audit`, `cargo deny`, `npm audit`, `pip-audit`, a 90% line-coverage minimum for `msgkit-core`, `cargo-semver-checks`, and a JSON Schema compatibility check (`scripts/schema_compat.py`).
+- Repository hygiene guard (`scripts/check_repo_hygiene.py`) that rejects real exports, databases, secrets, personal e-mail addresses, home paths and realistic phone numbers outside the fixture directories.
+- Dependabot for Cargo, npm, pip, Gradle and GitHub Actions; `deny.toml`; `requirements-dev.txt`; `.gitattributes` for LF line endings.
+
+### Changed
+- Distribution names: npm `@pamoda2004/msgkit`, PyPI `msgkit-core` (import name `msgkit`; the name `msgkit` is taken on PyPI by an unrelated project), Maven group `io.github.pamoda2004`. Nothing has been published yet.
+- The Rust toolchain is pinned to 1.99.0; the Node.js package now requires Node 20 or later; internal crates are declared once in `[workspace.dependencies]` with versions, as crates.io requires.
+- Licence holder is now "Pamoda Jayathilaka and msgkit contributors"; `SECURITY.md` names GitHub private vulnerability reporting.
+- Kotlin: JSON-parse failures no longer quote the parser's message, which can contain a snippet of the input.
+- Test fixtures use obviously fictional phone numbers (NANP 555-01xx range).
+
 ### Added
 - **Language packages** over the same core, with identical results in every language:
-  - `@msgkit/core` (`packages/node`): WebAssembly build (`msgkit-wasm`), no native addon, TypeScript types, runs on Node 18+, browsers, Deno and Bun.
-  - `msgkit` (`packages/python`): typed, dependency-free, platform wheel (`py3-none-<platform>`) bundling the native library; `scripts/test_wheel.py` tests the *installed* wheel.
-  - `dev.msgkit:msgkit` and `dev.msgkit:msgkit-android` (`packages/kotlin`): Kotlin API with serializable models over JNA; the Android artifact packages `libmsgkit_ffi.so` for arm64-v8a, armeabi-v7a, x86_64 and x86 (64-bit libraries are 16 KiB page-aligned).
+  - `@pamoda2004/msgkit` (`packages/node`): WebAssembly build (`msgkit-wasm`), no native addon, TypeScript types, runs on Node 20+, browsers, Deno and Bun.
+  - `msgkit-core` on PyPI, imported as `msgkit` (`packages/python`): typed, dependency-free, platform wheel (`py3-none-<platform>`) bundling the native library; `scripts/test_wheel.py` tests the *installed* wheel.
+  - `io.github.pamoda2004:msgkit` and `io.github.pamoda2004:msgkit-android` (`packages/kotlin`): Kotlin API with serializable models over JNA; the Android artifact packages `libmsgkit_ffi.so` for arm64-v8a, armeabi-v7a, x86_64 and x86 (64-bit libraries are 16 KiB page-aligned).
   - CI jobs for all three and a tag-triggered release workflow (not yet exercised).
 - `msgkit-wasm` crate: import-free WebAssembly module with a tiny C-like ABI (documented in docs/API.md).
 

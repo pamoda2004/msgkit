@@ -12,6 +12,28 @@ cargo fmt --all --check
 
 All three must pass; CI runs them on Linux, macOS and Windows.
 
+## Quality gates
+
+Every change must pass the same gates locally and in CI (`.github/workflows/ci.yml`). Warnings are errors.
+
+| Area | Command |
+|---|---|
+| Repository hygiene (no personal data) | `python scripts/check_repo_hygiene.py` and `python -m unittest discover -s scripts/tests` |
+| Rust format, lint (clippy pedantic), tests | `cargo fmt --all --check` · `cargo clippy --workspace --all-targets -- -D warnings` · `cargo test --workspace` |
+| Rust supply chain | `cargo deny check` · `cargo audit` |
+| Rust public API / JSON Schema compatibility | `cargo semver-checks --workspace --baseline-rev baseline-prototype` · `python scripts/schema_compat.py --base-ref <ref>` |
+| Coverage (msgkit-core, minimum 90% lines) | `cargo llvm-cov -p msgkit-core` (needs Linux/macOS or an MSVC Windows toolchain) |
+| Python | `pip install -r requirements-dev.txt` then `ruff check .` · `ruff format --check .` · `mypy` · `python -m unittest discover -s packages/python/tests` |
+| Node.js | in `packages/node`: `npm ci` · `npm run lint` · `npm run typecheck` · `npm test` · `npm audit` |
+| Kotlin | in `packages/kotlin`: `./gradlew ktlintCheck detekt :msgkit:test` (`./gradlew ktlintFormat` fixes style) |
+
+Notes:
+
+* The Rust toolchain is pinned in `rust-toolchain.toml`; bump it deliberately, together with `RUST_VERSION` in the workflows. A weekly canary job tries the newest stable release.
+* **Never commit real exports or personal data.** The hygiene check fails the build on anything that looks like an export, a database, a personal e-mail address, a home-directory path or a realistic phone number outside the fixture directories. Use synthetic data; phone numbers in tests must look obviously invented (for example `+94771234567`, `+12025550123`).
+* Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, `chore:`, `ci:`, `test:`, `refactor:`).
+* Commit with GitHub's no-reply e-mail address, not a personal one: `git config user.email "<id>+<username>@users.noreply.github.com"`.
+
 ## Language packages
 
 `packages/node`, `packages/python` and `packages/kotlin` are thin wrappers (see each README for build and test commands). Rules of thumb:

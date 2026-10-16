@@ -20,9 +20,9 @@ If your project can do what these do, msgkit works as a library for it. They rea
 | Project | Consumes | Needs |
 |---|---|---|
 | [`rust/`](rust) | the `msgkit-core` crate (by path; by git URL or crates.io once published) | Rust toolchain |
-| [`node/`](node) | `@msgkit/core` from an npm tarball | Node 18+ and the wasm build |
-| [`python/`](python) | the `msgkit` wheel, installed into a fresh virtual environment | Python 3.9+, `pip install build` |
-| [`kotlin/`](kotlin) | `dev.msgkit:msgkit` from the local Maven repository (natives bundled in the JAR) | JDK 17+, Android SDK variable set |
+| [`node/`](node) | `@pamoda2004/msgkit` from an npm tarball | Node 20+ and the wasm build |
+| [`python/`](python) | the `msgkit-core` wheel (imported as `msgkit`), installed into a fresh virtual environment | Python 3.9+, `pip install build` |
+| [`kotlin/`](kotlin) | `io.github.pamoda2004:msgkit` from the local Maven repository (natives bundled in the JAR) | JDK 17+, Android SDK variable set |
 
 Commands below are for Windows CMD, run from the repository root. Replace `\` with `/` on macOS/Linux.
 
@@ -40,7 +40,7 @@ cd packages\node
 node scripts\build.mjs
 npm pack --pack-destination ..\..\examples\consumers\node
 cd ..\..\examples\consumers\node
-npm install --no-save msgkit-core-0.1.0.tgz
+npm install --no-save pamoda2004-msgkit-0.1.0.tgz
 node app.mjs
 ```
 
@@ -73,11 +73,11 @@ cd ..\..\examples\consumers\kotlin
 gradlew.bat run
 ```
 
-`dev.msgkit:msgkit:0.1.0` is now in `~/.m2`. The consumer's `build.gradle.kts` is the whole integration:
+`io.github.pamoda2004:msgkit:0.1.0` is now in `~/.m2`. The consumer's `build.gradle.kts` is the whole integration:
 
 ```kotlin
 repositories { mavenLocal(); mavenCentral() }
-dependencies { implementation("dev.msgkit:msgkit:0.1.0") }
+dependencies { implementation("io.github.pamoda2004:msgkit:0.1.0") }
 ```
 
 ## Any other language

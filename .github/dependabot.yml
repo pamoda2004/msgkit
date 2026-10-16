@@ -1,0 +1,30 @@
+# Keeps dependencies and CI actions current. Grouped weekly PRs keep the noise low.
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule: { interval: weekly }
+    groups:
+      rust-minor-and-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: npm
+    directory: /packages/node
+    schedule: { interval: weekly }
+    groups:
+      npm-dev-tools:
+        update-types: [minor, patch]
+  - package-ecosystem: pip
+    directory: /
+    schedule: { interval: weekly }
+    groups:
+      python-dev-tools:
+        update-types: [minor, patch]
+  - package-ecosystem: gradle
+    directory: /packages/kotlin
+    schedule: { interval: weekly }
+  - package-ecosystem: gradle
+    directory: /examples/consumers/kotlin
+    schedule: { interval: weekly }
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }

@@ -1,5 +1,8 @@
 # msgkit
 
+[![CI](https://github.com/pamoda2004/msgkit/actions/workflows/ci.yml/badge.svg)](https://github.com/pamoda2004/msgkit/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 A portable toolkit for importing **SMS, WhatsApp and Messenger messages and calls** into one normalized model, usable from any language: backends, Android apps, scripts, desktop tools.
 
 ```
@@ -28,10 +31,10 @@ Pick the integration that fits; all of them run the same core and return the sam
 
 | You are writing... | Use | Docs |
 |---|---|---|
-| **Node.js, browsers, Deno, Bun** | `@msgkit/core`: WebAssembly, no native addon, TypeScript types | [packages/node](packages/node/README.md) |
-| **Python** (3.9+) | `msgkit`: platform wheel, no dependencies, typed | [packages/python](packages/python/README.md) |
-| **Kotlin / Java**: JVM servers, desktop | `dev.msgkit:msgkit` (natives bundled) | [packages/kotlin](packages/kotlin/README.md) |
-| **Android** (API 26+) | `dev.msgkit:msgkit-android` (AAR with all four ABIs) | [packages/kotlin](packages/kotlin/README.md) |
+| **Node.js, browsers, Deno, Bun** | `@pamoda2004/msgkit`: WebAssembly, no native addon, TypeScript types | [packages/node](packages/node/README.md) |
+| **Python** (3.9+) | `msgkit-core` (`import msgkit`): platform wheel, no dependencies, typed | [packages/python](packages/python/README.md) |
+| **Kotlin / Java**: JVM servers, desktop | `io.github.pamoda2004:msgkit` (natives bundled) | [packages/kotlin](packages/kotlin/README.md) |
+| **Android** (API 26+) | `io.github.pamoda2004:msgkit-android` (AAR with all four ABIs) | [packages/kotlin](packages/kotlin/README.md) |
 | Anything else, over the network | **HTTP sidecar** `msgkit-service` | [openapi.yaml](openapi.yaml) |
 | C#, Go, Swift, PHP, Dart... in-process | **C ABI** `msgkit-ffi` (one function, JSON in/out) | [docs/API.md](docs/API.md) |
 | Rust | the **`msgkit-core`** crate | `cargo doc -p msgkit-core --open` |
@@ -63,13 +66,14 @@ Webhook endpoints (`/webhooks/whatsapp`, `/webhooks/messenger`) refuse all traff
 
 ```js
 // Node.js / browsers (WebAssembly)
-import { parseWhatsAppExport } from '@msgkit/core';
+import { parseWhatsAppExport } from '@pamoda2004/msgkit';
 const report = parseWhatsAppExport(text, { self_name: 'Alice', utc_offset_minutes: 330 });
 ```
 
 ```python
 # Python
 import msgkit
+
 report = msgkit.parse_whatsapp_export(text, self_name="Alice", utc_offset_minutes=330)
 ```
 
@@ -93,7 +97,7 @@ crates/
   msgkit-ffi/       C ABI (cdylib/staticlib) + include/msgkit.h
   msgkit-wasm/      WebAssembly build (no imports, tiny C-like ABI)
 packages/
-  node/             @msgkit/core: JS host for the wasm module + TypeScript types
+  node/             @pamoda2004/msgkit: JS host for the wasm module + TypeScript types
   python/           msgkit: ctypes wrapper, typed, platform wheel
   kotlin/           Gradle build: `msgkit` (JVM, JNA) and `msgkit-android` (AAR with .so per ABI)
 schema/             generated JSON Schemas: the language-neutral contract

@@ -55,9 +55,9 @@ The Node, Python and Kotlin packages expose the operations above as idiomatic fu
 
 | Package | Backend | Docs |
 |---|---|---|
-| `@msgkit/core` (npm) | `msgkit-wasm` (WebAssembly, no native addon) | [packages/node](../packages/node/README.md) |
-| `msgkit` (PyPI) | `msgkit-ffi` via ctypes, bundled in a platform wheel | [packages/python](../packages/python/README.md) |
-| `dev.msgkit:msgkit`, `dev.msgkit:msgkit-android` (Maven) | `msgkit-ffi` via JNA; `.so` per ABI on Android | [packages/kotlin](../packages/kotlin/README.md) |
+| `@pamoda2004/msgkit` (npm) | `msgkit-wasm` (WebAssembly, no native addon) | [packages/node](../packages/node/README.md) |
+| `msgkit-core` (PyPI; import name `msgkit`) | `msgkit-ffi` via ctypes, bundled in a platform wheel | [packages/python](../packages/python/README.md) |
+| `io.github.pamoda2004:msgkit`, `io.github.pamoda2004:msgkit-android` (Maven) | `msgkit-ffi` via JNA; `.so` per ABI on Android | [packages/kotlin](../packages/kotlin/README.md) |
 
 ### WebAssembly ABI
 

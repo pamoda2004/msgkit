@@ -22,7 +22,7 @@ jobs:
   check-version:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Tag matches the workspace version
         run: |
           version=$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)
@@ -43,9 +43,10 @@ jobs:
           - { os: windows-11-arm, target: aarch64-pc-windows-msvc, jna: win32-aarch64, lib: msgkit_ffi.dll }
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
+          toolchain: 1.99.0
           targets: ${{ matrix.target }}
       - run: cargo build -p msgkit-ffi --release --locked --target ${{ matrix.target }}
       - name: Stage library in JNA's resource layout
@@ -53,7 +54,7 @@ jobs:
         run: |
           mkdir -p "natives/${{ matrix.jna }}"
           cp "target/${{ matrix.target }}/release/${{ matrix.lib }}" "natives/${{ matrix.jna }}/"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: native-${{ matrix.jna }}
           path: natives
@@ -73,7 +74,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     container: ${{ matrix.container }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # Linux wheels are built inside a manylinux container for broad glibc compatibility.
       - name: Rust (container)
         if: matrix.container != ''
@@ -81,11 +82,12 @@ jobs:
           curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
           echo "/opt/python/cp312-cp312/bin" >> "$GITHUB_PATH"
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         if: matrix.container == ''
         with:
+          toolchain: 1.99.0
           targets: ${{ matrix.target }}
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         if: matrix.container == ''
         with:
           python-version: "3.12"
@@ -93,7 +95,7 @@ jobs:
       - run: python packages/python/scripts/build_wheel.py --target ${{ matrix.target }} --out dist
         env:
           MSGKIT_WHEEL_PLAT: ${{ matrix.plat }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: wheel-${{ matrix.target }}
           path: dist/*.whl
@@ -102,11 +104,12 @@ jobs:
     needs: check-version
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
+          toolchain: 1.99.0
           targets: wasm32-unknown-unknown
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
       - run: node packages/node/scripts/build.mjs
@@ -114,7 +117,7 @@ jobs:
         working-directory: packages/node
       - run: npm pack
         working-directory: packages/node
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: npm-package
           path: packages/node/*.tgz
@@ -123,15 +126,16 @@ jobs:
     needs: natives
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
+          toolchain: 1.99.0
           targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
           java-version: 21
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: native-*
           path: packages/kotlin/msgkit/natives
@@ -139,7 +143,7 @@ jobs:
       - run: python3 packages/kotlin/scripts/build_android_libs.py
       - run: ./gradlew :msgkit:jar :msgkit:sourcesJar :msgkit-android:assembleRelease --console=plain
         working-directory: packages/kotlin
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: kotlin-artifacts
           path: |
@@ -152,10 +156,10 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: artifacts
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           generate_release_notes: true
           files: |
@@ -171,12 +175,12 @@ jobs:
     permissions:
       id-token: write # PyPI trusted publishing
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: wheel-*
           path: dist
           merge-multiple: true
-      - uses: pypa/gh-action-pypi-publish@release/v1
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
 
   publish-npm:
     needs: github-release
@@ -186,10 +190,10 @@ jobs:
       contents: read
       id-token: write # npm provenance
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: npm-package
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org

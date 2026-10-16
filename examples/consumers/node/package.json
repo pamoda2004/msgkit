@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "A separate Node.js project that uses @msgkit/core as an installed dependency.",
+  "description": "A separate Node.js project that uses @pamoda2004/msgkit as an installed dependency.",
   "scripts": {
     "start": "node app.mjs"
   }

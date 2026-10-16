@@ -4,7 +4,7 @@ import { createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { parseWhatsAppExport, verifySignature } from '@msgkit/core';
+import { parseWhatsAppExport, verifySignature } from '@pamoda2004/msgkit';
 
 const file =
   process.argv[2] ?? fileURLToPath(new URL('../../../crates/msgkit-core/tests/fixtures/whatsapp_android_dmy.txt', import.meta.url));

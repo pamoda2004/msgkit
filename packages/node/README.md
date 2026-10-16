@@ -1,9 +1,9 @@
-# @msgkit/core for Node.js and browsers
+# @pamoda2004/msgkit for Node.js and browsers
 
 Import **SMS, WhatsApp and Messenger** messages and calls into one normalized model.
 
 ```js
-import { parseWhatsAppExport } from '@msgkit/core';
+import { parseWhatsAppExport } from '@pamoda2004/msgkit';
 import { readFileSync } from 'node:fs';
 
 const report = parseWhatsAppExport(readFileSync('_chat.txt', 'utf8'), {
@@ -34,7 +34,7 @@ Options and results use the same `snake_case` JSON as every other msgkit binding
 > `normalize*Webhook` does **not** verify signatures. Call `verifySignature` on the raw request body first.
 
 ```js
-import { verifySignature, normalizeWhatsAppWebhook } from '@msgkit/core';
+import { verifySignature, normalizeWhatsAppWebhook } from '@pamoda2004/msgkit';
 
 app.post('/webhooks/whatsapp', express.raw({ type: 'application/json' }), (req, res) => {
   const body = req.body.toString('utf8'); // the raw, unparsed body
@@ -52,8 +52,8 @@ app.post('/webhooks/whatsapp', express.raw({ type: 'application/json' }), (req, 
 There is no synchronous file access, so load the module explicitly once:
 
 ```js
-import { init, parseWhatsAppExport } from '@msgkit/core';
-await init(fetch(new URL('@msgkit/core/msgkit.wasm', import.meta.url)));
+import { init, parseWhatsAppExport } from '@pamoda2004/msgkit';
+await init(fetch(new URL('@pamoda2004/msgkit/msgkit.wasm', import.meta.url)));
 ```
 
 (Bundlers such as Vite and webpack resolve that URL; otherwise host `msgkit.wasm` yourself and pass its URL.) `init()` also accepts a `WebAssembly.Module`, an `ArrayBuffer` or a typed array.

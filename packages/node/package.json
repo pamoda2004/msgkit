@@ -1,9 +1,28 @@
 {
-  "name": "@msgkit/core",
+  "name": "@pamoda2004/msgkit",
   "version": "0.1.0",
   "description": "Import SMS, WhatsApp and Messenger messages and calls into one normalized model. Portable WebAssembly build; no native addons.",
-  "keywords": ["sms", "whatsapp", "messenger", "facebook", "import", "chat-export", "webhook", "wasm"],
+  "keywords": [
+    "sms",
+    "whatsapp",
+    "messenger",
+    "facebook",
+    "import",
+    "chat-export",
+    "webhook",
+    "wasm"
+  ],
   "license": "MIT",
+  "author": "Pamoda Jayathilaka",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pamoda2004/msgkit.git",
+    "directory": "packages/node"
+  },
+  "homepage": "https://github.com/pamoda2004/msgkit#readme",
+  "bugs": {
+    "url": "https://github.com/pamoda2004/msgkit/issues"
+  },
   "type": "module",
   "main": "./src/index.js",
   "types": "./src/index.d.ts",
@@ -21,13 +40,29 @@
       "default": "./src/load-browser.js"
     }
   },
-  "files": ["src", "dist/msgkit.wasm", "README.md", "LICENSE"],
+  "files": [
+    "src",
+    "dist/msgkit.wasm",
+    "README.md",
+    "LICENSE"
+  ],
   "sideEffects": false,
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "scripts": {
     "build": "node scripts/build.mjs",
-    "test": "node --test test/msgkit.test.mjs"
+    "test": "node --test test/msgkit.test.mjs",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "audit": "npm audit --audit-level=moderate"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.6.5",
+    "eslint": "^10.13.0",
+    "globals": "^17.13.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.71.2"
   }
 }

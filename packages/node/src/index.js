@@ -1,4 +1,4 @@
-// @msgkit/core: JavaScript host for the msgkit WebAssembly module.
+// @pamoda2004/msgkit: JavaScript host for the msgkit WebAssembly module.
 //
 // Every function takes and returns plain JSON-compatible objects whose shape
 // is defined by the JSON Schemas in the msgkit repository (`schema/`), so the
@@ -22,16 +22,29 @@ export class MsgkitError extends Error {
   }
 }
 
+/**
+ * The exports of the msgkit WebAssembly module (see crates/msgkit-wasm).
+ * @typedef {object} MsgkitExports
+ * @property {WebAssembly.Memory} memory
+ * @property {(len: number) => number} msgkit_alloc
+ * @property {(ptr: number, len: number) => void} msgkit_dealloc
+ * @property {(opPtr: number, opLen: number, inPtr: number, inLen: number) => number} msgkit_call
+ * @property {() => number} msgkit_last_len
+ * @property {() => number} msgkit_version
+ */
+
 /** @type {WebAssembly.Module | null} */
 let compiled = null;
-/** @type {WebAssembly.Exports | null} */
+/** @type {MsgkitExports | null} */
 let exportsCache = null;
 
+/** @param {WebAssembly.Module} module */
 function instantiateSync(module) {
   const instance = new WebAssembly.Instance(module, {});
-  exportsCache = instance.exports;
+  exportsCache = /** @type {MsgkitExports} */ (/** @type {unknown} */ (instance.exports));
 }
 
+/** @param {unknown} source */
 async function toModule(source) {
   const resolved = await source;
   if (resolved instanceof WebAssembly.Module) return resolved;
@@ -46,7 +59,7 @@ async function toModule(source) {
     return WebAssembly.compile(await resolved.arrayBuffer());
   }
   if (resolved instanceof ArrayBuffer || ArrayBuffer.isView(resolved)) {
-    return WebAssembly.compile(resolved);
+    return WebAssembly.compile(/** @type {BufferSource} */ (resolved));
   }
   throw new TypeError('init(): expected a WebAssembly.Module, Response, ArrayBuffer or typed array');
 }
@@ -72,14 +85,21 @@ export function initSync(bytes) {
   instantiateSync(compiled);
 }
 
+/** @returns {MsgkitExports} */
 function wasm() {
   if (exportsCache === null) {
     if (compiled !== null) instantiateSync(compiled);
     else initSync();
   }
+  if (exportsCache === null) throw new MsgkitError('internal_error', 'WebAssembly module is not initialised');
   return exportsCache;
 }
 
+/**
+ * @param {MsgkitExports} x
+ * @param {Uint8Array} bytes
+ * @returns {number}
+ */
 function writeBytes(x, bytes) {
   const ptr = x.msgkit_alloc(bytes.length);
   // Re-read `memory.buffer` after every allocation: growing memory detaches old views.
@@ -141,7 +161,7 @@ export function version() {
 /**
  * Parses a WhatsApp "Export chat" text file.
  * @param {string} text file contents (UTF-8)
- * @param {import('./index').WhatsAppExportOptions} [options]
+ * @param {import('./index.js').WhatsAppExportOptions} [options]
  */
 export function parseWhatsAppExport(text, options = {}) {
   return dispatch('parse_whatsapp_export', { text, options });
@@ -150,7 +170,7 @@ export function parseWhatsAppExport(text, options = {}) {
 /**
  * Parses one Messenger `message_N.json` file ("Download Your Information").
  * @param {object | string} thread the parsed JSON, or its text
- * @param {import('./index').FacebookExportOptions} [options]
+ * @param {import('./index.js').FacebookExportOptions} [options]
  */
 export function parseFacebookExport(thread, options = {}) {
   return dispatch('parse_facebook_export', {
@@ -161,8 +181,8 @@ export function parseFacebookExport(thread, options = {}) {
 
 /**
  * Normalizes Android SMS and call-log rows collected on a device.
- * @param {import('./index').DeviceBatch} batch
- * @param {import('./index').DeviceOptions} [options]
+ * @param {import('./index.js').DeviceBatch} batch
+ * @param {import('./index.js').DeviceOptions} [options]
  */
 export function normalizeDevice(batch, options = {}) {
   return dispatch('normalize_device', { batch, options });

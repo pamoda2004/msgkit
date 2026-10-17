@@ -1,0 +1,8 @@
+{
+  "op": "normalize_whatsapp_webhook",
+  "input": {},
+  "note": "Official WhatsApp Business Cloud API payload",
+  "json_files": {
+    "payload": "payload.json"
+  }
+}

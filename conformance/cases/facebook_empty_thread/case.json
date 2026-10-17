@@ -1,0 +1,10 @@
+{
+  "op": "parse_facebook_export",
+  "input": {
+    "thread": {
+      "participants": [],
+      "messages": []
+    }
+  },
+  "note": "An empty thread"
+}

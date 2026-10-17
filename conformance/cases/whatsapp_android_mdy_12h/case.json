@@ -1,0 +1,12 @@
+{
+  "op": "parse_whatsapp_export",
+  "input": {
+    "options": {
+      "date_order": "mdy"
+    }
+  },
+  "note": "12-hour clock with AM/PM around midnight and noon",
+  "files": {
+    "text": "chat.txt"
+  }
+}

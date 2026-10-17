@@ -1,0 +1,10 @@
+{
+  "op": "parse_facebook_export",
+  "input": {
+    "options": {}
+  },
+  "note": "Latin-1 misdecoded UTF-8 is repaired; correct text is left alone; unsent messages are dropped",
+  "json_files": {
+    "thread": "thread.json"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "op": "parse_whatsapp_export",
+  "input": {
+    "options": {}
+  },
+  "note": "Empty input",
+  "files": {
+    "text": "chat.txt"
+  }
+}

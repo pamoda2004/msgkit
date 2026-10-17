@@ -1,0 +1,12 @@
+{
+  "op": "parse_whatsapp_export",
+  "input": {
+    "options": {
+      "date_order": "dmy"
+    }
+  },
+  "note": "Impossible dates are skipped with one warning",
+  "files": {
+    "text": "chat.txt"
+  }
+}

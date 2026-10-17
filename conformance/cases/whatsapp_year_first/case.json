@@ -1,0 +1,10 @@
+{
+  "op": "parse_whatsapp_export",
+  "input": {
+    "options": {}
+  },
+  "note": "Year-first dates are unambiguous",
+  "files": {
+    "text": "chat.txt"
+  }
+}

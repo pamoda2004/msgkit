@@ -1,0 +1,12 @@
+{
+  "op": "parse_whatsapp_export",
+  "input": {
+    "options": {
+      "date_order": "dmy"
+    }
+  },
+  "note": "Sinhala and Tamil names and text",
+  "files": {
+    "text": "chat.txt"
+  }
+}

@@ -10,7 +10,7 @@
 //! normalized yet), delivery/read receipts and other non-message events.
 
 use chrono::DateTime;
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use serde_json::Value;
 use sha2::Sha256;
 

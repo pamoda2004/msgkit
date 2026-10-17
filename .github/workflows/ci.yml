@@ -69,16 +69,16 @@ jobs:
       - run: cargo test -p msgkit-core --test schema --locked
 
   msrv:
-    name: Rust MSRV (1.85)
+    name: Rust MSRV (1.88)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
-          toolchain: "1.85"
+          toolchain: "1.88"
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       # rust-toolchain.toml pins the project toolchain; override it for this job only.
-      - run: cargo +1.85 check --workspace --all-targets --locked
+      - run: cargo +1.88 check --workspace --all-targets --locked
 
   coverage:
     name: Coverage (msgkit-core)
@@ -98,6 +98,8 @@ jobs:
           cargo llvm-cov -p msgkit-core --locked --no-report
           cargo llvm-cov report --lcov --output-path lcov.info
           cargo llvm-cov report --json --summary-only --output-path coverage.json
+      - name: Show the least-covered files
+        run: python3 scripts/coverage_gaps.py lcov.info
       - name: Enforce the minimum
         run: |
           pct=$(python3 -c "import json; print(round(json.load(open('coverage.json'))['data'][0]['totals']['lines']['percent'], 2))")
@@ -209,9 +211,16 @@ jobs:
       # Build the wheel, install it into a clean venv and test *that* (one interpreter per OS is enough).
       - name: Wheel test
         if: matrix.python == '3.12'
+        shell: bash
         run: |
           python -m pip install build
-          python packages/python/scripts/test_wheel.py
+          status=0
+          python packages/python/scripts/test_wheel.py > wheel-test.log 2>&1 || status=$?
+          cat wheel-test.log
+          if [ "$status" -ne 0 ]; then
+            echo "::error title=Wheel test failed::$(tail -n 12 wheel-test.log | tr '[:space:]' ' ' | cut -c1-1500)"
+          fi
+          exit "$status"
 
   node:
     name: Node.js ${{ matrix.node }}
@@ -302,7 +311,7 @@ jobs:
         with:
           api-level: 34
           arch: x86_64
-          script: cd packages/kotlin && ./gradlew :msgkit-android:connectedDebugAndroidTest --console=plain
+          script: sh scripts/ci_android_tests.sh
 
   # Weekly canary: does the newest stable Rust (new clippy lints) still pass? Never blocks a change.
   rust-latest-stable:

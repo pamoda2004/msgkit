@@ -31,6 +31,6 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 hex = "0.4.3"
 hmac = "0.13.0"
 http-body-util = "0.1.5"
-sha2 = "0.10.9"
+sha2 = "0.11.1"
 tempfile = "3.27.0"
 tower = { version = "0.5.3", features = ["util"] }

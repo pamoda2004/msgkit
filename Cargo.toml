@@ -5,7 +5,7 @@ members = ["crates/*"]
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.85"
+rust-version = "1.88"
 license = "MIT"
 authors = ["Pamoda Jayathilaka and msgkit contributors"]
 repository = "https://github.com/pamoda2004/msgkit"

@@ -11,6 +11,7 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 - Dependabot for Cargo, npm, pip, Gradle and GitHub Actions; `deny.toml`; `requirements-dev.txt`; `.gitattributes` for LF line endings.
 
 ### Changed
+- **Minimum supported Rust version raised from 1.85 to 1.88**: `sha2` 0.11 requires it. `hmac` 0.13 and `sha2` 0.11 were updated together (they share `digest` 0.11); signature verification still compares in constant time (`digest` 0.11 uses `ctutils::CtEq`), and known-answer tests (RFC 4231) and pinned id tests guard the behaviour.
 - Distribution names: npm `@pamoda2004/msgkit`, PyPI `msgkit-core` (import name `msgkit`; the name `msgkit` is taken on PyPI by an unrelated project), Maven group `io.github.pamoda2004`. Nothing has been published yet.
 - The Rust toolchain is pinned to 1.99.0; the Node.js package now requires Node 20 or later; internal crates are declared once in `[workspace.dependencies]` with versions, as crates.io requires.
 - Licence holder is now "Pamoda Jayathilaka and msgkit contributors"; `SECURITY.md` names GitHub private vulnerability reporting.

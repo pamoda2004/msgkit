@@ -1,0 +1,5 @@
+{
+  "op": "parse_facebook_export",
+  "input": { "thread": { "messages": "PRIVATE-VALUE-MUST-NOT-APPEAR" } },
+  "note": "A parse error does not quote the thread content"
+}

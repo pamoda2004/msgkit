@@ -1,0 +1,5 @@
+{
+  "op": "normalize_device",
+  "input": { "batch": { "sms": [{ "address": "+15550100111", "body": "PRIVATE-VALUE-MUST-NOT-APPEAR", "date_ms": "yesterday", "type": 1 }] } },
+  "note": "A wrong field type does not quote the message body next to it"
+}

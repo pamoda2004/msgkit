@@ -11,6 +11,9 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 ### Added (testing depth, Phase 2)
 - **Conformance suite** (`conformance/`): 49 language-independent cases (input files plus the expected canonical JSON response) that the Rust core, the Python wheel, the Node.js WebAssembly package, the Kotlin/JNA package and the HTTP service must reproduce byte for byte; CI fails on any difference. Covers day/month ambiguity, 12/24-hour clocks, multi-line messages, media and system notices, deleted/edited messages, group chats, Facebook mojibake repair, emoji, Sinhala, Tamil and right-to-left text, very long messages, empty/truncated files, CRLF/LF/BOM variants, the id rules, signatures and error envelopes. See `conformance/README.md`.
 
+### Fixed
+- **Error messages no longer repeat the input** (audit finding F01). `serde_json` messages quoted the offending value (for example ``unknown variant `...` ``), and the HTTP service returned axum's default rejection text, which quoted request bodies. Core errors now keep only the category, a missing field's name and the position; the service answers malformed bodies and query strings with fixed texts. Guarded by `tests/error_redaction.rs`, an HTTP test and three conformance cases.
+
 ### Changed
 - Python: requests to the native library are serialized as compact JSON, so error messages that mention a column are identical in every binding.
 

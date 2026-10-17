@@ -32,8 +32,40 @@ impl Error {
     }
 }
 
+/// Describes a JSON error without repeating any of the input.
+///
+/// `serde_json` messages quote the offending value (`invalid type: string "..."`, `unknown variant
+/// "..."`), and message content must never reach error text or logs. Only the error category, the name of
+/// a missing field (a constant of the data contract, not user data) and, when `with_position` is set, the
+/// line and column are kept.
+#[must_use]
+pub fn describe_json_error(e: &serde_json::Error, with_position: bool) -> String {
+    use serde_json::error::Category;
+    let kind = match e.classify() {
+        Category::Io => "could not read the JSON input",
+        Category::Syntax => "invalid JSON syntax",
+        Category::Eof => "unexpected end of JSON input",
+        Category::Data => "the JSON does not match the expected shape",
+    };
+    let text = e.to_string();
+    let missing = text
+        .strip_prefix("missing field `")
+        .and_then(|rest| rest.split_once('`'))
+        .filter(|(name, _)| name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
+        .map(|(name, _)| format!(" (missing field `{name}`)"))
+        .unwrap_or_default();
+    if !with_position || e.line() == 0 {
+        // Errors from an already-parsed value (`from_value`) have no position.
+        format!("{kind}{missing}")
+    } else {
+        format!("{kind}{missing} at line {} column {}", e.line(), e.column())
+    }
+}
+
 impl From<serde_json::Error> for Error {
     fn from(e: serde_json::Error) -> Self {
-        Error::InvalidInput(e.to_string())
+        // The request document is assembled by a language binding, so a position inside it would differ
+        // between bindings (key order, spacing) and tell the caller nothing about their own data.
+        Error::InvalidInput(describe_json_error(&e, false))
     }
 }

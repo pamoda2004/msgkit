@@ -1,1 +1,1 @@
-{"error":{"code":"invalid_input","message":"invalid input: missing field `text` at line 1 column 14"},"ok":false}
+{"error":{"code":"invalid_input","message":"invalid input: the JSON does not match the expected shape (missing field `text`)"},"ok":false}

@@ -45,7 +45,8 @@ def main() -> None:
             [str(python), "-c", code], check=True, capture_output=True, text=True, cwd=tmp
         ).stdout.strip()
         print("native library:", out)
-        if str(venv) not in out:
+        # Compare resolved paths: Windows runners report the temp directory in both 8.3 and long form.
+        if not Path(out).resolve().is_relative_to(venv.resolve()):
             raise SystemExit("the wheel did not provide the native library")
 
         run([str(python), "-m", "unittest", "discover", "-s", str(PKG / "tests"), "-v"], cwd=tmp)

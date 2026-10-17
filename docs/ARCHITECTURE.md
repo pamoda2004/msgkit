@@ -61,7 +61,7 @@ The core never decides where data lives; it defines the `EventStore` trait (inse
 ## Data contract
 
 * `Event` is a tagged union (`type: "message" | "call"`).
-* **Ids are deterministic** (SHA-256 of channel, kind and identifying fields; for exports an ordinal disambiguates identical lines within the same minute). Re-importing yields the same ids, so stores de-duplicate with a unique key.
+* **Ids are deterministic** (SHA-256 of channel, kind and identifying fields; for exports an ordinal disambiguates identical lines within the same minute). Re-importing yields the same ids, so stores de-duplicate with a unique key. How an id is built: `sha256("msgkit:v1" + 0x1f + part + ...)`, first 16 bytes as hex. For WhatsApp exports the parts are the channel, `msg` or `call`, the **local wall-clock time exactly as the file wrote it** (the two leading date numbers in file order, 24-hour clock, no offset), the sender **as written**, the body and an **occurrence index** for identical lines in the same minute. SMS and call-log rows use the epoch milliseconds and the address as written. Consequently an id never changes with `utc_offset_minutes`, `date_order` or `default_country_code`; only the source data can change it. Changing this derivation is a breaking change for every consumer's de-duplication.
 * **Timestamps are UTC.** Sources without a zone (WhatsApp exports) take an explicit `utc_offset_minutes`.
 * **Participants** use E.164 numbers when known, otherwise the platform id or display name.
 * **Attachments are references**, never bytes.

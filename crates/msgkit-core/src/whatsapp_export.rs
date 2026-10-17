@@ -242,6 +242,45 @@ fn call_from_system_text(text: &str) -> Option<bool> {
     }
 }
 
+/// Phrases (English exports) that mark a line as a system notice rather than a message.
+const NOTICE_PHRASES: [&str; 23] = [
+    "end-to-end encrypted",
+    "created group",
+    "created this group",
+    "changed the subject",
+    "changed this group",
+    "changed the group",
+    "changed their phone number",
+    "changed the phone number",
+    "security code",
+    "joined using this group",
+    "joined using a group link",
+    "was added",
+    "were added",
+    "added you",
+    "you added",
+    "removed you",
+    "you removed",
+    " added ",
+    " removed ",
+    "now an admin",
+    "no longer an admin",
+    "disappearing messages",
+    "deleted this group",
+];
+
+/// Whether a whole line (one without a `sender: ` prefix) is a notice WhatsApp writes into every export.
+fn is_known_notice(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    NOTICE_PHRASES.iter().any(|p| lower.contains(p)) || lower.ends_with(" left") || lower.ends_with(" joined")
+}
+
+/// Whether the part before the first `": "` is really a notice that merely contains a colon later on, such
+/// as `Alex changed the subject from "Team: A" to "B"`, and not a sender name.
+fn candidate_is_notice(candidate: &str) -> bool {
+    is_known_notice(candidate) || candidate.contains(['"', '\u{201c}', '\u{201d}'])
+}
+
 /// Parses the contents of a WhatsApp chat export.
 #[must_use]
 pub fn parse(text: &str, opts: &WhatsAppExportOptions) -> ImportReport {
@@ -298,6 +337,7 @@ fn build_events(
 ) -> ImportReport {
     let mut ordinals = Ordinals::default();
     let mut bad_dates = 0usize;
+    let mut unrecognized = 0usize;
 
     for entry in entries {
         let (Some(timestamp), Some(local)) =
@@ -308,7 +348,9 @@ fn build_events(
         };
 
         let (name, body) = match entry.text.split_once(": ") {
-            Some((n, b)) if !n.is_empty() && n.chars().count() <= 100 => (n.trim(), b),
+            Some((n, b)) if !n.is_empty() && n.chars().count() <= 100 && !candidate_is_notice(n) => {
+                (n.trim(), b)
+            }
             _ => {
                 // System notice. Missed calls are the only ones worth keeping.
                 if let Some(video) = call_from_system_text(&entry.text) {
@@ -327,6 +369,8 @@ fn build_events(
                         participants: vec![],
                         raw: None,
                     }));
+                } else if !is_known_notice(&entry.text) {
+                    unrecognized += 1;
                 }
                 continue;
             }
@@ -367,6 +411,12 @@ fn build_events(
         report
             .warnings
             .push(format!("{bad_dates} message(s) skipped because their date could not be parsed"));
+    }
+    if unrecognized > 0 {
+        report.warnings.push(format!(
+            "{unrecognized} line(s) without a sender were ignored: not a message or a recognized notice \
+             (exports in other languages are not supported yet)"
+        ));
     }
     report.sort();
     report

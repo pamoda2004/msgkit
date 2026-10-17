@@ -5,6 +5,7 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 ## [Unreleased]
 
 ### Changed (breaking, before any release)
+- **Kotlin/Android package renamed from `dev.msgkit` to `io.github.pamoda2004.msgkit`** (and `dev.msgkit.android` to `io.github.pamoda2004.msgkit.android`), so the source package matches the Maven group `io.github.pamoda2004`. Update imports; ProGuard/R8 users get the new keep rule from the AAR automatically. Nothing had been published, so no released version is affected.
 - **Event ids for WhatsApp exports and device (SMS/call-log) records are derived differently** (decision D1). They no longer depend on `utc_offset_minutes`, `date_order` or `default_country_code`: WhatsApp ids use the local wall-clock time exactly as written in the export, the sender as written and the body, plus an occurrence index so two identical messages in the same minute (for example two "ok") keep separate ids; device ids use the address or number as written. Re-importing the same chat with different settings, or from overlapping exports, now yields the same ids. Every id produced by earlier builds changes once; nothing had been published and no stored data exists, so no migration is provided. Facebook and webhook ids are unchanged.
 
 ### Added (quality gates, Phase 1)

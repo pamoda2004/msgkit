@@ -1,4 +1,4 @@
-package dev.msgkit
+package io.github.pamoda2004.msgkit
 
 /**
  * Error reported by msgkit.

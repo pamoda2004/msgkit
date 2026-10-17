@@ -65,7 +65,8 @@ class ConformanceTest {
                     value.isString -> canonicalString(value.content, out)
                     value.content == "true" || value.content == "false" -> out.append(value.content)
                     else -> {
-                        assertTrue(value.content.all { it.isDigit() || it == '-' }, "no floats in conformance output: $value")
+                        val integer = value.content.all { it.isDigit() || it == '-' }
+                        assertTrue(integer, "no floats in conformance output: $value")
                         out.append(value.content)
                     }
                 }

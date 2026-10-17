@@ -110,7 +110,7 @@ Design details and the reasoning behind them: [docs/ARCHITECTURE.md](docs/ARCHIT
 
 ## Development
 
-Requires a stable Rust toolchain (see `rust-toolchain.toml`).
+Requires a stable Rust toolchain (see `rust-toolchain.toml`). The minimum supported Rust version (MSRV) is **1.88**; CI builds the whole workspace with it.
 
 ```bash
 cargo test --workspace

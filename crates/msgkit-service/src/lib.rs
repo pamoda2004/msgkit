@@ -19,7 +19,8 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use axum::body::Bytes;
-use axum::extract::{DefaultBodyLimit, Query, Request, State};
+use axum::extract::rejection::{JsonRejection, QueryRejection};
+use axum::extract::{DefaultBodyLimit, FromRequest, FromRequestParts, Query, Request, State};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
@@ -31,6 +32,7 @@ use msgkit_core::store::{EventStore, MemoryStore};
 use msgkit_core::whatsapp_export::{self, WhatsAppExportOptions};
 use msgkit_core::{webhook, Event, ImportReport, SCHEMA_VERSION};
 use msgkit_store_sqlite::{SqliteStore, DEFAULT_RETENTION};
+use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
@@ -164,6 +166,60 @@ fn bad_request(msg: impl ToString) -> ApiError {
     ApiError(StatusCode::BAD_REQUEST, msg.to_string())
 }
 
+/// A JSON request body whose rejection never repeats the body.
+///
+/// axum's own rejection text quotes the offending value (`invalid type: string "..."`), and request
+/// bodies hold message content, which must never reach responses or logs.
+struct AppJson<T>(T);
+
+impl<S, T> FromRequest<S> for AppJson<T>
+where
+    S: Send + Sync,
+    T: DeserializeOwned,
+{
+    type Rejection = ApiError;
+
+    async fn from_request(req: Request, state: &S) -> Result<Self, ApiError> {
+        match Json::<T>::from_request(req, state).await {
+            Ok(Json(value)) => Ok(AppJson(value)),
+            Err(rejection) => Err(ApiError(rejection.status(), json_rejection_text(&rejection).to_owned())),
+        }
+    }
+}
+
+fn json_rejection_text(rejection: &JsonRejection) -> &'static str {
+    match rejection {
+        JsonRejection::MissingJsonContentType(_) => "expected a request with content-type application/json",
+        JsonRejection::JsonSyntaxError(_) => "the request body is not valid JSON",
+        JsonRejection::JsonDataError(_) => "the JSON body does not match the expected shape",
+        JsonRejection::BytesRejection(_) => "the request body could not be read (too large?)",
+        _ => "the request body was rejected",
+    }
+}
+
+/// A query string whose rejection never repeats it (it can contain names and numbers).
+struct AppQuery<T>(T);
+
+impl<S, T> FromRequestParts<S> for AppQuery<T>
+where
+    S: Send + Sync,
+    T: DeserializeOwned,
+{
+    type Rejection = ApiError;
+
+    async fn from_request_parts(parts: &mut axum::http::request::Parts, state: &S) -> Result<Self, ApiError> {
+        match Query::<T>::from_request_parts(parts, state).await {
+            Ok(Query(value)) => Ok(AppQuery(value)),
+            Err(rejection) => {
+                let QueryRejection::FailedToDeserializeQueryString(_) = &rejection else {
+                    return Err(ApiError(rejection.status(), "the query string was rejected".to_owned()));
+                };
+                Err(ApiError(StatusCode::BAD_REQUEST, "the query string is invalid".to_owned()))
+            }
+        }
+    }
+}
+
 /// Compares secrets without leaking their length-matching prefix via timing.
 fn secrets_match(a: &str, b: &str) -> bool {
     let (a, b) = (a.as_bytes(), b.as_bytes());
@@ -203,23 +259,23 @@ async fn version() -> Json<Value> {
 }
 
 async fn import_whatsapp(
-    Query(opts): Query<WhatsAppExportOptions>,
+    AppQuery(opts): AppQuery<WhatsAppExportOptions>,
     body: String,
 ) -> Result<Json<ImportReport>, ApiError> {
     Ok(Json(blocking(move || whatsapp_export::parse(&body, &opts)).await?))
 }
 
 async fn import_facebook(
-    Query(opts): Query<FacebookExportOptions>,
-    Json(thread): Json<Value>,
+    AppQuery(opts): AppQuery<FacebookExportOptions>,
+    AppJson(thread): AppJson<Value>,
 ) -> Result<Json<ImportReport>, ApiError> {
     let report = blocking(move || facebook::parse_value(thread, &opts)).await?;
     report.map(Json).map_err(bad_request)
 }
 
 async fn import_device(
-    Query(opts): Query<DeviceOptions>,
-    Json(batch): Json<DeviceBatch>,
+    AppQuery(opts): AppQuery<DeviceOptions>,
+    AppJson(batch): AppJson<DeviceBatch>,
 ) -> Result<Json<ImportReport>, ApiError> {
     Ok(Json(blocking(move || device::normalize(&batch, &opts)).await?))
 }
@@ -232,7 +288,7 @@ struct EventsQuery {
 
 async fn events(
     State(state): State<AppState>,
-    Query(q): Query<EventsQuery>,
+    AppQuery(q): AppQuery<EventsQuery>,
 ) -> Result<Json<Vec<Event>>, ApiError> {
     let events = state.with_store_blocking(move |s| if q.drain { s.drain() } else { s.list() }).await?;
     Ok(Json(events))
@@ -245,7 +301,7 @@ struct AckRequest {
 
 async fn acknowledge(
     State(state): State<AppState>,
-    Json(req): Json<AckRequest>,
+    AppJson(req): AppJson<AckRequest>,
 ) -> Result<Json<Value>, ApiError> {
     let n = state.with_store_blocking(move |s| s.acknowledge(&req.ids)).await?;
     Ok(Json(json!({ "acknowledged": n })))
@@ -293,7 +349,13 @@ async fn receive_webhook(
 
     let payload: Value = match serde_json::from_slice(body) {
         Ok(v) => v,
-        Err(e) => return bad_request(format!("invalid JSON: {e}")).into_response(),
+        Err(e) => {
+            return bad_request(format!(
+                "invalid JSON: {}",
+                msgkit_core::error::describe_json_error(&e, true)
+            ))
+            .into_response()
+        }
     };
     let report = match normalize(&payload) {
         Ok(r) => r,
@@ -316,7 +378,7 @@ async fn receive_webhook(
     .into_response()
 }
 
-async fn whatsapp_verify(State(s): State<AppState>, Query(q): Query<VerifyQuery>) -> Response {
+async fn whatsapp_verify(State(s): State<AppState>, AppQuery(q): AppQuery<VerifyQuery>) -> Response {
     verify_subscription(s.config.whatsapp.as_ref(), q)
 }
 
@@ -324,7 +386,7 @@ async fn whatsapp_receive(State(s): State<AppState>, headers: HeaderMap, body: B
     receive_webhook(&s, s.config.whatsapp.as_ref(), &headers, &body, webhook::normalize_whatsapp).await
 }
 
-async fn messenger_verify(State(s): State<AppState>, Query(q): Query<VerifyQuery>) -> Response {
+async fn messenger_verify(State(s): State<AppState>, AppQuery(q): AppQuery<VerifyQuery>) -> Response {
     verify_subscription(s.config.messenger.as_ref(), q)
 }
 

@@ -98,15 +98,23 @@ pub fn fix_encoding(s: &str) -> String {
 
 /// Parses one `message_N.json` file.
 pub fn parse(json: &str, opts: &FacebookExportOptions) -> Result<ImportReport> {
-    let thread: Thread = serde_json::from_str(json)
-        .map_err(|e| Error::Parse(format!("not a Facebook messages export: {e}")))?;
+    let thread: Thread = serde_json::from_str(json).map_err(|e| {
+        Error::Parse(format!(
+            "not a Facebook messages export: {}",
+            crate::error::describe_json_error(&e, true)
+        ))
+    })?;
     Ok(build(thread, opts))
 }
 
 /// Like [`parse`], for callers that already hold a JSON value.
 pub fn parse_value(value: Value, opts: &FacebookExportOptions) -> Result<ImportReport> {
-    let thread: Thread = serde_json::from_value(value)
-        .map_err(|e| Error::Parse(format!("not a Facebook messages export: {e}")))?;
+    let thread: Thread = serde_json::from_value(value).map_err(|e| {
+        Error::Parse(format!(
+            "not a Facebook messages export: {}",
+            crate::error::describe_json_error(&e, false)
+        ))
+    })?;
     Ok(build(thread, opts))
 }
 

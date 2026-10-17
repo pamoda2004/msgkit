@@ -151,7 +151,9 @@ fn insert_row(conn: &Connection, event: &Event) -> Result<bool> {
 }
 
 fn parse_row(json: &str) -> Result<Event> {
-    serde_json::from_str(json).map_err(|e| storage(format!("corrupt event row: {e}")))
+    serde_json::from_str(json).map_err(|e| {
+        storage(format!("corrupt event row: {}", msgkit_core::error::describe_json_error(&e, true)))
+    })
 }
 
 impl EventStore for SqliteStore {

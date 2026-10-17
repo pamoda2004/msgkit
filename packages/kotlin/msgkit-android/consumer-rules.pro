@@ -2,4 +2,4 @@
 -dontwarn java.awt.*
 -keep class com.sun.jna.* { *; }
 -keepclassmembers class * extends com.sun.jna.* { public *; }
--keep class dev.msgkit.internal.NativeLib { *; }
+-keep class io.github.pamoda2004.msgkit.internal.NativeLib { *; }

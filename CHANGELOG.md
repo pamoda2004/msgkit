@@ -4,6 +4,9 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 
 ## [Unreleased]
 
+### Changed (breaking, before any release)
+- **Kotlin/Android package renamed from `dev.msgkit` to `io.github.pamoda2004.msgkit`** (and `dev.msgkit.android` to `io.github.pamoda2004.msgkit.android`), so the source package matches the Maven group `io.github.pamoda2004`. Update imports; ProGuard/R8 users get the new keep rule from the AAR automatically. Nothing had been published, so no released version is affected.
+
 ### Added (quality gates, Phase 1)
 - CI matrix: Rust on Linux, macOS and Windows; Python 3.9 to 3.13 on all three; Node.js 20 to 24; Kotlin on JDK 17 and 21 (plus Windows and macOS); Android emulator tests; weekly advisory run and a newest-Rust canary. All actions are pinned to commit SHAs.
 - Gates: `rustfmt`, `clippy::pedantic` as errors, `ruff` and `mypy` (strict) for Python, `eslint` and `tsc --noEmit` (strict) for Node.js, `ktlint` and `detekt` for Kotlin, `cargo audit`, `cargo deny`, `npm audit`, `pip-audit`, a 90% line-coverage minimum for `msgkit-core`, `cargo-semver-checks`, and a JSON Schema compatibility check (`scripts/schema_compat.py`).

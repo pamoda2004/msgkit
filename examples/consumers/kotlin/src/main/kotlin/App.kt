@@ -1,8 +1,8 @@
 // A tiny application that uses msgkit as an *installed dependency* (resolved from a Maven repository).
 // Prints chat statistics; the same program exists for Node.js, Python and Rust and prints the same output.
-import dev.msgkit.CallOutcome
-import dev.msgkit.Msgkit
-import dev.msgkit.WhatsAppExportOptions
+import io.github.pamoda2004.msgkit.CallOutcome
+import io.github.pamoda2004.msgkit.Msgkit
+import io.github.pamoda2004.msgkit.WhatsAppExportOptions
 import java.io.File
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec

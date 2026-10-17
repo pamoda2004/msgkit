@@ -1,0 +1,13 @@
+{
+  "op": "normalize_device",
+  "input": {
+    "options": {
+      "own_number": "+94770000000",
+      "default_country_code": "94"
+    }
+  },
+  "note": "SMS and call log rows",
+  "json_files": {
+    "batch": "batch.json"
+  }
+}

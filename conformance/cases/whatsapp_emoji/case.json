@@ -1,0 +1,12 @@
+{
+  "op": "parse_whatsapp_export",
+  "input": {
+    "options": {
+      "date_order": "dmy"
+    }
+  },
+  "note": "Astral emoji, skin tone, ZWJ sequence and a flag",
+  "files": {
+    "text": "chat.txt"
+  }
+}

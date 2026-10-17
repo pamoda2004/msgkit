@@ -1,0 +1,12 @@
+{
+  "op": "parse_whatsapp_export",
+  "input": {
+    "options": {
+      "date_order": "dmy"
+    }
+  },
+  "note": "UTF-8 byte order mark in front of the first header",
+  "files": {
+    "text": "chat.txt"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "op": "parse_facebook_export",
+  "input": {
+    "thread": 5
+  },
+  "note": "Wrong shape"
+}

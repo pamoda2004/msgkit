@@ -1,0 +1,13 @@
+{
+  "op": "parse_whatsapp_export",
+  "input": {
+    "options": {
+      "date_order": "dmy",
+      "default_country_code": "94"
+    }
+  },
+  "note": "Same ids with a default country code",
+  "files": {
+    "text": "chat.txt"
+  }
+}

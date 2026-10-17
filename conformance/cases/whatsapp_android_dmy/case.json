@@ -1,0 +1,14 @@
+{
+  "op": "parse_whatsapp_export",
+  "input": {
+    "options": {
+      "self_name": "Alice",
+      "utc_offset_minutes": 330,
+      "date_order": "auto"
+    }
+  },
+  "note": "Android 24-hour, day first, media, a missed call, a multi-line message and two identical lines",
+  "files": {
+    "text": "chat.txt"
+  }
+}

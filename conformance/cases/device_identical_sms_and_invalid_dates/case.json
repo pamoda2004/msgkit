@@ -1,0 +1,35 @@
+{
+  "op": "normalize_device",
+  "input": {
+    "batch": {
+      "sms": [
+        {
+          "address": "+15550100111",
+          "body": "ok",
+          "date_ms": 1700000000000,
+          "type": 1
+        },
+        {
+          "address": "+15550100111",
+          "body": "ok",
+          "date_ms": 1700000000000,
+          "type": 1
+        },
+        {
+          "address": "x",
+          "body": "bad date",
+          "date_ms": 9007199254740991,
+          "type": 1
+        }
+      ],
+      "calls": [
+        {
+          "number": "+15550100111",
+          "date_ms": 1700000100000,
+          "type": 3
+        }
+      ]
+    }
+  },
+  "note": "Identical rows keep separate ids; an impossible timestamp is skipped"
+}

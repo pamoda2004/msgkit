@@ -53,6 +53,7 @@ tasks.test {
     val repo = rootDir.resolve("../..")
     systemProperty("msgkit.fixtures", repo.resolve("crates/msgkit-core/tests/fixtures").absolutePath)
     systemProperty("msgkit.workspaceVersion", workspaceVersion)
+    systemProperty("msgkit.conformance", repo.resolve("conformance/cases").absolutePath)
     // Use the freshly built native library from the Cargo target directory.
     val libDirs = listOf("release", "debug").map { repo.resolve("target/$it") }.filter { it.isDirectory }
     systemProperty("jna.library.path", libDirs.joinToString(File.pathSeparator) { it.absolutePath })

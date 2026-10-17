@@ -1,0 +1,38 @@
+{
+  "participants": [
+    {
+      "name": "Kamal"
+    },
+    {
+      "name": "Alex"
+    }
+  ],
+  "messages": [
+    {
+      "sender_name": "Kamal",
+      "timestamp_ms": 1704067500000,
+      "type": "Generic",
+      "content": "ð smile"
+    },
+    {
+      "sender_name": "Kamal",
+      "timestamp_ms": 1704067400000,
+      "type": "Generic",
+      "content": "plain ascii and cafÃ©"
+    },
+    {
+      "sender_name": "Alex",
+      "timestamp_ms": 1704067300000,
+      "type": "Generic",
+      "content": "already correct: café 😀"
+    },
+    {
+      "sender_name": "Alex",
+      "timestamp_ms": 1704067200000,
+      "type": "Generic",
+      "is_unsent": true
+    }
+  ],
+  "title": "Kamal",
+  "thread_path": "inbox/kamal_xyz"
+}

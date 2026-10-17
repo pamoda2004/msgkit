@@ -1,0 +1,12 @@
+{
+  "op": "parse_whatsapp_export",
+  "input": {
+    "options": {
+      "date_order": "mdy"
+    }
+  },
+  "note": "Same text, month first",
+  "files": {
+    "text": "chat.txt"
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "op": "normalize_device",
+  "input": {
+    "batch": {
+      "calls": [
+        {
+          "number": "+15550100111",
+          "date_ms": 1700000000000,
+          "type": 0,
+          "duration_secs": 0
+        },
+        {
+          "number": "+15550100111",
+          "date_ms": 1700000000001,
+          "type": 1,
+          "duration_secs": 0
+        },
+        {
+          "number": "+15550100111",
+          "date_ms": 1700000000002,
+          "type": 2,
+          "duration_secs": 30
+        },
+        {
+          "number": "+15550100111",
+          "date_ms": 1700000000003,
+          "type": 3,
+          "duration_secs": 0
+        },
+        {
+          "number": "+15550100111",
+          "date_ms": 1700000000004,
+          "type": 4,
+          "duration_secs": 0
+        },
+        {
+          "number": "+15550100111",
+          "date_ms": 1700000000005,
+          "type": 5,
+          "duration_secs": 0
+        },
+        {
+          "number": "+15550100111",
+          "date_ms": 1700000000006,
+          "type": 6,
+          "duration_secs": 0
+        },
+        {
+          "number": "+15550100111",
+          "date_ms": 1700000000007,
+          "type": 7,
+          "duration_secs": 0
+        }
+      ]
+    }
+  },
+  "note": "Every call type code"
+}

@@ -1,0 +1,12 @@
+{
+  "op": "parse_whatsapp_export",
+  "input": {
+    "options": {
+      "date_order": "dmy"
+    }
+  },
+  "note": "CRLF line endings",
+  "files": {
+    "text": "chat.txt"
+  }
+}

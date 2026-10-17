@@ -1,0 +1,7 @@
+{
+  "op": "parse_whatsapp_export",
+  "input": {
+    "text": 5
+  },
+  "note": "Wrong field type"
+}

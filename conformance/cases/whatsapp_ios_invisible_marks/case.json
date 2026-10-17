@@ -1,0 +1,12 @@
+{
+  "op": "parse_whatsapp_export",
+  "input": {
+    "options": {
+      "date_order": "dmy"
+    }
+  },
+  "note": "iOS left-to-right marks and a narrow no-break space before PM",
+  "files": {
+    "text": "chat.txt"
+  }
+}

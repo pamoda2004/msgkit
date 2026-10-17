@@ -1,0 +1,12 @@
+{
+  "op": "parse_whatsapp_export",
+  "input": {
+    "options": {
+      "date_order": "dmy"
+    }
+  },
+  "note": "Arabic and Hebrew with bidirectional controls",
+  "files": {
+    "text": "chat.txt"
+  }
+}

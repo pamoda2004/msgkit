@@ -1,0 +1,13 @@
+{
+  "op": "parse_whatsapp_export",
+  "input": {
+    "options": {
+      "self_name": "Bob",
+      "date_order": "dmy"
+    }
+  },
+  "note": "iOS bracket format with seconds",
+  "files": {
+    "text": "chat.txt"
+  }
+}

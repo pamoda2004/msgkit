@@ -1,0 +1,12 @@
+{
+  "op": "parse_whatsapp_export",
+  "input": {
+    "options": {
+      "date_order": "dmy"
+    }
+  },
+  "note": "Two identical lines in one minute get separate ids (59fd..., 2cc3...)",
+  "files": {
+    "text": "chat.txt"
+  }
+}

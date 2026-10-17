@@ -142,6 +142,16 @@ fn parse_timestamp(h: &Header, order: DateOrder, offset: FixedOffset) -> Option<
         }
     };
 
+    let (hour, minute, second) = parse_clock(h)?;
+    let naive = NaiveDateTime::new(
+        NaiveDate::from_ymd_opt(year, month, day)?,
+        NaiveTime::from_hms_opt(hour, minute, second)?,
+    );
+    offset.from_local_datetime(&naive).single().map(|dt| dt.with_timezone(&Utc))
+}
+
+/// The time of a header as (hour, minute, second) on a 24-hour clock.
+fn parse_clock(h: &Header) -> Option<(u32, u32, u32)> {
     let mut t = h.time.split([':', '.']);
     let mut hour = t.next()?.parse::<u32>().ok()?;
     let minute = t.next()?.parse::<u32>().ok()?;
@@ -154,12 +164,32 @@ fn parse_timestamp(h: &Header, order: DateOrder, offset: FixedOffset) -> Option<
             hour += 12;
         }
     }
+    Some((hour, minute, second))
+}
 
-    let naive = NaiveDateTime::new(
-        NaiveDate::from_ymd_opt(year, month, day)?,
-        NaiveTime::from_hms_opt(hour, minute, second)?,
-    );
-    offset.from_local_datetime(&naive).single().map(|dt| dt.with_timezone(&Utc))
+/// The moment a line was written, exactly as the file wrote it: local wall-clock time with no offset.
+///
+/// Ids are derived from this key instead of the UTC timestamp. The two leading date numbers are kept in
+/// the order they appear, so neither `utc_offset_minutes` nor the way the day/month order was resolved
+/// can change an id, and the same chat gets the same ids from overlapping exports.
+fn local_key(h: &Header) -> Option<String> {
+    let (first, second, third) = split_date(&h.date)?;
+    let (hour, minute, sec) = parse_clock(h)?;
+    let date = if first.len() == 4 {
+        format!(
+            "{:04}-{:02}-{:02}",
+            first.parse::<i32>().ok()?,
+            second.parse::<u32>().ok()?,
+            third.parse::<u32>().ok()?
+        )
+    } else {
+        let mut year = third.parse::<i32>().ok()?;
+        if third.len() <= 2 {
+            year += 2000;
+        }
+        format!("{:02}.{:02}.{:04}", first.parse::<u32>().ok()?, second.parse::<u32>().ok()?, year)
+    };
+    Some(format!("{date}T{hour:02}:{minute:02}:{sec:02}"))
 }
 
 fn kind_from_name(name: &str) -> AttachmentKind {
@@ -270,19 +300,20 @@ fn build_events(
     let mut bad_dates = 0usize;
 
     for entry in entries {
-        let Some(timestamp) = parse_timestamp(&entry.header, order, offset) else {
+        let (Some(timestamp), Some(local)) =
+            (parse_timestamp(&entry.header, order, offset), local_key(&entry.header))
+        else {
             bad_dates += 1;
             continue;
         };
-        let ts = timestamp.timestamp().to_string();
 
         let (name, body) = match entry.text.split_once(": ") {
             Some((n, b)) if !n.is_empty() && n.chars().count() <= 100 => (n.trim(), b),
             _ => {
                 // System notice. Missed calls are the only ones worth keeping.
                 if let Some(video) = call_from_system_text(&entry.text) {
-                    let n = ordinals.next(&format!("call|{ts}|{video}"));
-                    let id = derive_id(&["whatsapp", "call", &ts, &video.to_string(), &n.to_string()]);
+                    let n = ordinals.next(&format!("call|{local}|{video}"));
+                    let id = derive_id(&["whatsapp", "call", &local, &video.to_string(), &n.to_string()]);
                     report.events.push(Event::Call(Call {
                         id,
                         channel: Channel::Whatsapp,
@@ -313,8 +344,10 @@ fn build_events(
         let attachment = parse_media(body);
         let text = (attachment.is_none() && !body.is_empty()).then(|| body.to_owned());
 
-        let n = ordinals.next(&format!("msg|{ts}|{sender_id}|{body}"));
-        let id = derive_id(&["whatsapp", "msg", &ts, &sender_id, body, &n.to_string()]);
+        // Identical lines in the same minute are told apart by their occurrence index. The sender is the
+        // name as written, not the normalized phone number, so `default_country_code` cannot change ids.
+        let n = ordinals.next(&format!("msg|{local}|{name}|{body}"));
+        let id = derive_id(&["whatsapp", "msg", &local, name, body, &n.to_string()]);
         report.events.push(Event::Message(Message {
             id,
             channel: Channel::Whatsapp,

@@ -1,0 +1,10 @@
+{
+  "op": "parse_whatsapp_export",
+  "input": {
+    "options": {}
+  },
+  "note": "Both numbers are 12 or less: auto warns and falls back to day first",
+  "files": {
+    "text": "chat.txt"
+  }
+}

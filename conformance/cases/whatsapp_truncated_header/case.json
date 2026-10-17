@@ -1,0 +1,12 @@
+{
+  "op": "parse_whatsapp_export",
+  "input": {
+    "options": {
+      "date_order": "dmy"
+    }
+  },
+  "note": "The file ends in the middle of a header",
+  "files": {
+    "text": "chat.txt"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "op": "parse_whatsapp_export",
+  "input": {
+    "options": {
+      "date_order": "dmy"
+    }
+  },
+  "note": "The same chat with LF line endings: identical events as the CRLF case",
+  "files": {
+    "text": "chat.txt"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "op": "normalize_messenger_webhook",
+  "input": {},
+  "note": "Official Messenger Platform payload",
+  "json_files": {
+    "payload": "payload.json"
+  }
+}

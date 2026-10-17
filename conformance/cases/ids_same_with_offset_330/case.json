@@ -1,0 +1,13 @@
+{
+  "op": "parse_whatsapp_export",
+  "input": {
+    "options": {
+      "date_order": "dmy",
+      "utc_offset_minutes": 330
+    }
+  },
+  "note": "Same ids as the offset 0 case; only the UTC timestamps move",
+  "files": {
+    "text": "chat.txt"
+  }
+}

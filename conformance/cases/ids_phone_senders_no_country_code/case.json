@@ -1,0 +1,12 @@
+{
+  "op": "parse_whatsapp_export",
+  "input": {
+    "options": {
+      "date_order": "dmy"
+    }
+  },
+  "note": "Phone-number senders without a default country code",
+  "files": {
+    "text": "chat.txt"
+  }
+}

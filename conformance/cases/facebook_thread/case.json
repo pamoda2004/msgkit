@@ -1,0 +1,12 @@
+{
+  "op": "parse_facebook_export",
+  "input": {
+    "options": {
+      "self_name": "Alice Perera"
+    }
+  },
+  "note": "Calls, a missed video call, mojibake repair, a photo and a text message",
+  "json_files": {
+    "thread": "thread.json"
+  }
+}

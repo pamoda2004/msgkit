@@ -1,0 +1,13 @@
+{
+  "op": "parse_whatsapp_export",
+  "input": {
+    "options": {
+      "date_order": "dmy",
+      "self_name": "Sam"
+    }
+  },
+  "note": "Current behaviour for deleted and edited messages (golden; revisited when notices are modelled)",
+  "files": {
+    "text": "chat.txt"
+  }
+}

@@ -1,0 +1,1 @@
+{"data":{"events":[{"attachments":[],"body":"fine","channel":"whatsapp","direction":"unknown","id":"36daad2765abd7ff7bcb686151b93a04","recipients":[],"sender":{"display_name":"Alex","id":"Alex"},"timestamp":"2024-02-01T10:00:00Z","type":"message"}],"warnings":["3 message(s) skipped because their date could not be parsed"]},"ok":true}

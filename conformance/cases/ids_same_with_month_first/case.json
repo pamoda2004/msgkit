@@ -1,0 +1,12 @@
+{
+  "op": "parse_whatsapp_export",
+  "input": {
+    "options": {
+      "date_order": "mdy"
+    }
+  },
+  "note": "Same ids with the other date order; the instants differ",
+  "files": {
+    "text": "chat.txt"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "op": "parse_whatsapp_export",
+  "input": {
+    "options": {
+      "date_order": "dmy",
+      "self_name": "Sam",
+      "default_country_code": "94"
+    }
+  },
+  "note": "Group chat with several senders, a number as sender and a non-contact marker",
+  "files": {
+    "text": "chat.txt"
+  }
+}

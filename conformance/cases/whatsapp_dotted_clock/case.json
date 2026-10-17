@@ -1,0 +1,12 @@
+{
+  "op": "parse_whatsapp_export",
+  "input": {
+    "options": {
+      "date_order": "dmy"
+    }
+  },
+  "note": "Some locales use a dot between hours and minutes",
+  "files": {
+    "text": "chat.txt"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "op": "verify_signature",
+  "input": {
+    "secret": "Jefe",
+    "body": "x",
+    "signature": "md5=abcd"
+  }
+}

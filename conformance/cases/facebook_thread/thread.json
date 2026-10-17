@@ -1,0 +1,12 @@
+{
+  "participants": [{ "name": "Alice Perera" }, { "name": "Bob" }],
+  "messages": [
+    { "sender_name": "Alice Perera", "timestamp_ms": 1704067600000, "type": "Call", "call_duration": 125, "content": "Alice Perera called you." },
+    { "sender_name": "Bob", "timestamp_ms": 1704067500000, "type": "Call", "call_duration": 0, "content": "You missed a video call from Bob." },
+    { "sender_name": "Alice Perera", "timestamp_ms": 1704067400000, "type": "Generic", "content": "cafÃ© â\u009d¤" },
+    { "sender_name": "Bob", "timestamp_ms": 1704067300000, "type": "Generic", "photos": [{ "uri": "messages/inbox/bob_abc123/photos/1.jpg" }] },
+    { "sender_name": "Bob", "timestamp_ms": 1704067200000, "type": "Generic", "content": "Hi" }
+  ],
+  "title": "Bob",
+  "thread_path": "inbox/bob_abc123"
+}

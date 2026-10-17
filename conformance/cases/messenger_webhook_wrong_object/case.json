@@ -1,0 +1,9 @@
+{
+  "op": "normalize_messenger_webhook",
+  "input": {
+    "payload": {
+      "object": "whatsapp_business_account"
+    }
+  },
+  "note": "Wrong object type"
+}

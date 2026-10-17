@@ -1,0 +1,9 @@
+{
+  "op": "normalize_whatsapp_webhook",
+  "input": {
+    "payload": {
+      "object": "page"
+    }
+  },
+  "note": "Wrong object type"
+}

@@ -75,7 +75,9 @@ def dispatch(op: str, payload: Any = None) -> Any:
     Raises :class:`MsgkitError` for error envelopes. Thread-safe.
     """
     lib = _load()
-    raw = lib.msgkit_call(op.encode("utf-8"), json.dumps({} if payload is None else payload).encode("utf-8"))
+    raw = lib.msgkit_call(
+        op.encode("utf-8"), json.dumps({} if payload is None else payload, separators=(",", ":")).encode("utf-8")
+    )
     if not raw:
         raise MsgkitError("internal_error", "msgkit returned no result")
     try:

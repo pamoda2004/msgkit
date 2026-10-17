@@ -1,0 +1,13 @@
+{
+  "op": "parse_whatsapp_export",
+  "input": {
+    "options": {
+      "date_order": "dmy",
+      "self_name": "Sam"
+    }
+  },
+  "note": "Media placeholders, attachments, notices and missed calls",
+  "files": {
+    "text": "chat.txt"
+  }
+}

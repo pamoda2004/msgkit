@@ -1,0 +1,12 @@
+{
+  "op": "parse_whatsapp_export",
+  "input": {
+    "options": {
+      "date_order": "dmy"
+    }
+  },
+  "note": "A 16,500 character message",
+  "files": {
+    "text": "chat.txt"
+  }
+}

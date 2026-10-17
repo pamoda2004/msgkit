@@ -1,0 +1,12 @@
+{
+  "op": "parse_whatsapp_export",
+  "input": {
+    "options": {
+      "date_order": "dmy"
+    }
+  },
+  "note": "Continuation lines, including a blank line",
+  "files": {
+    "text": "chat.txt"
+  }
+}

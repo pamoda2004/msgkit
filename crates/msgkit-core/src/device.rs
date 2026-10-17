@@ -91,12 +91,12 @@ pub fn normalize(batch: &DeviceBatch, opts: &DeviceOptions) -> ImportReport {
             _ => (Direction::Unknown, remote, vec![]),
         };
         let ts = s.date_ms.to_string();
-        let remote_id = sender.id.clone();
-        let n = ordinals.next(&format!("sms|{ts}|{}|{}", s.kind, s.body));
-        // The device row id is not stable across devices or after a restore,
-        // so the derived id is content-based and the row id is only kept as
-        // `external_id`.
-        let id = derive_id(&["sms", "msg", &ts, &s.kind.to_string(), &remote_id, &s.body, &n.to_string()]);
+        // The device row id is not stable across devices or after a restore, so the derived id is
+        // content-based and the row id is only kept as `external_id`. The address is used as written,
+        // not normalized, so `default_country_code` cannot change ids.
+        let address = s.address.trim();
+        let n = ordinals.next(&format!("sms|{ts}|{}|{address}|{}", s.kind, s.body));
+        let id = derive_id(&["sms", "msg", &ts, &s.kind.to_string(), address, &s.body, &n.to_string()]);
         report.events.push(Event::Message(Message {
             id,
             channel: Channel::Sms,
@@ -130,9 +130,10 @@ pub fn normalize(batch: &DeviceBatch, opts: &DeviceOptions) -> ImportReport {
         let mut remote = party(&c.number);
         remote.display_name = c.name.clone().filter(|n| !n.is_empty());
         let ts = c.date_ms.to_string();
-        let n = ordinals.next(&format!("call|{ts}|{}|{}", c.kind, remote.id));
+        let number = c.number.trim();
+        let n = ordinals.next(&format!("call|{ts}|{}|{number}", c.kind));
         report.events.push(Event::Call(Call {
-            id: derive_id(&["cellular", "call", &ts, &c.kind.to_string(), &remote.id, &n.to_string()]),
+            id: derive_id(&["cellular", "call", &ts, &c.kind.to_string(), number, &n.to_string()]),
             channel: Channel::Cellular,
             external_id: c.id.clone(),
             conversation_id: None,

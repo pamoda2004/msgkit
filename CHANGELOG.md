@@ -4,6 +4,9 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 
 ## [Unreleased]
 
+### Changed (breaking, before any release)
+- **Event ids for WhatsApp exports and device (SMS/call-log) records are derived differently** (decision D1). They no longer depend on `utc_offset_minutes`, `date_order` or `default_country_code`: WhatsApp ids use the local wall-clock time exactly as written in the export, the sender as written and the body, plus an occurrence index so two identical messages in the same minute (for example two "ok") keep separate ids; device ids use the address or number as written. Re-importing the same chat with different settings, or from overlapping exports, now yields the same ids. Every id produced by earlier builds changes once; nothing had been published and no stored data exists, so no migration is provided. Facebook and webhook ids are unchanged.
+
 ### Added (quality gates, Phase 1)
 - CI matrix: Rust on Linux, macOS and Windows; Python 3.9 to 3.13 on all three; Node.js 20 to 24; Kotlin on JDK 17 and 21 (plus Windows and macOS); Android emulator tests; weekly advisory run and a newest-Rust canary. All actions are pinned to commit SHAs.
 - Gates: `rustfmt`, `clippy::pedantic` as errors, `ruff` and `mypy` (strict) for Python, `eslint` and `tsc --noEmit` (strict) for Node.js, `ktlint` and `detekt` for Kotlin, `cargo audit`, `cargo deny`, `npm audit`, `pip-audit`, a 90% line-coverage minimum for `msgkit-core`, `cargo-semver-checks`, and a JSON Schema compatibility check (`scripts/schema_compat.py`).

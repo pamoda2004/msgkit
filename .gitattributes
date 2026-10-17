@@ -6,6 +6,10 @@
 *.bat text eol=crlf
 *.cmd text eol=crlf
 
+# Shell scripts and the Gradle wrapper script must keep LF, or they fail on Linux and macOS.
+gradlew text eol=lf
+*.sh text eol=lf
+
 # Binary files: never touch or diff as text.
 *.jar binary
 *.pdf binary

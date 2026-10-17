@@ -17,7 +17,7 @@ workspace = true
 [dependencies]
 chrono = { version = "0.4.45", default-features = false, features = ["std", "serde"] }
 hex = "0.4.3"
-hmac = "0.12.1"
+hmac = "0.13.0"
 regex = "1.13.1"
 schemars = { version = "1.2.3", features = ["chrono04"] }
 serde = { version = "1.0.229", features = ["derive"] }

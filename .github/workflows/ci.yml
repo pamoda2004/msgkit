@@ -217,8 +217,7 @@ jobs:
           python packages/python/scripts/test_wheel.py 2>&1 | tee wheel-test.log
           status=${PIPESTATUS[0]}
           if [ "$status" -ne 0 ]; then
-            echo "::error title=Wheel test failed::$(tail -n 12 wheel-test.log | sed -e ':a;N;$!ba;s/
-/%0A/g' | cut -c1-1500)"
+            echo "::error title=Wheel test failed::$(tail -n 12 wheel-test.log | tr '[:space:]' ' ' | cut -c1-1500)"
           fi
           exit "$status"
 

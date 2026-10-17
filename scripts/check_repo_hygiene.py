@@ -140,6 +140,30 @@ class Violation:
         return f"[{self.rule}] {where}"
 
 
+# Real mail providers: fixtures and tests must use example.com / example.org instead.
+FREE_MAIL_DOMAINS = (
+    "gmail.com",
+    "googlemail.com",
+    "yahoo.com",
+    "outlook.com",
+    "hotmail.com",
+    "live.com",
+    "icloud.com",
+    "aol.com",
+    "proton.me",
+    "protonmail.com",
+)
+
+
+def scan_free_mail(rel: str, text: str) -> Iterator[Violation]:
+    """Flags addresses at real mail providers, even inside the otherwise exempt fixture directories."""
+    for number, line in enumerate(text.splitlines(), start=1):
+        for m in EMAIL.finditer(line):
+            domain = m.group(1).lower()
+            if domain in FREE_MAIL_DOMAINS or domain.endswith(tuple("." + d for d in FREE_MAIL_DOMAINS)):
+                yield Violation("real-mail-domain", rel, number)
+
+
 def is_fixture(rel: str) -> bool:
     return rel.startswith(FIXTURE_PREFIXES + SELF_TEST_PREFIXES)
 
@@ -178,6 +202,11 @@ def scan_text(rel: str, text: str) -> Iterator[Violation]:
 def scan_file(root: Path, rel: str) -> Iterator[Violation]:
     """Scans one repository-relative path (forward slashes)."""
     if is_fixture(rel):
+        try:
+            data = (root / rel).read_bytes()[:MAX_TEXT_BYTES].decode("utf-8", errors="replace")
+        except OSError:
+            return
+        yield from scan_free_mail(rel, data)
         return
     name = rel.rsplit("/", 1)[-1]
     if any(fnmatch.fnmatch(name, pattern) for pattern in FORBIDDEN_NAMES):

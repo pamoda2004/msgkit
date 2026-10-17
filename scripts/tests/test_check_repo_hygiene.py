@@ -99,6 +99,18 @@ class PersonalIdentifiers(unittest.TestCase):
         self.assertEqual(rules("a.rs", "let t = 1704067200000; // 2024-01-01 abcdef0123456789abcdef0123456789"), set())
 
 
+class RealMailDomains(unittest.TestCase):
+    def test_free_mail_is_flagged_even_in_fixture_directories(self) -> None:
+        for provider in ("gmail", "yahoo", "outlook"):
+            text = "from: person@" + provider + ".com"
+            self.assertIn("real-mail-domain", rules("crates/msgkit-core/tests/fixtures/chat.txt", text))
+            self.assertIn("real-mail-domain", rules("scripts/tests/sample.py", text))
+
+    def test_reserved_example_domains_are_fine_in_fixtures(self) -> None:
+        text = "from: person@example.com, other@example.org"
+        self.assertEqual(rules("crates/msgkit-core/tests/fixtures/chat.txt", text), set())
+
+
 class PrivateTerms(unittest.TestCase):
     def test_terms_are_matched_case_insensitively_and_never_printed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

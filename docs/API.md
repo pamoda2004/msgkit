@@ -44,7 +44,7 @@ const char *msgkit_version(void);          /* static, do not free */
 * Panics never cross the boundary.
 * The library is thread-safe (no shared state).
 
-Reference wrappers over this ABI: [`packages/python/src/msgkit/_native.py`](../packages/python/src/msgkit/_native.py) (ctypes) and [`packages/kotlin/.../NativeLib.kt`](../packages/kotlin/msgkit/src/main/kotlin/dev/msgkit/internal/NativeLib.kt) (JNA). When binding from another language:
+Reference wrappers over this ABI: [`packages/python/src/msgkit/_native.py`](../packages/python/src/msgkit/_native.py) (ctypes) and [`packages/kotlin/.../NativeLib.kt`](../packages/kotlin/msgkit/src/main/kotlin/io/github/pamoda2004/msgkit/internal/NativeLib.kt) (JNA). When binding from another language:
 
 * Keep the result as a **raw pointer** (not an auto-converted string) so it can be passed to `msgkit_free`; with ctypes that means `restype = c_void_p`.
 * Pass strings as explicit **UTF-8 bytes**. Auto-marshalled strings use the platform charset in some runtimes (JNA on Windows, for example) and corrupt non-ASCII text.

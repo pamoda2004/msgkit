@@ -1,4 +1,4 @@
-package dev.msgkit.internal
+package io.github.pamoda2004.msgkit.internal
 
 import com.sun.jna.Library
 import com.sun.jna.Native

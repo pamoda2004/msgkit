@@ -8,7 +8,7 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 - CI matrix: Rust on Linux, macOS and Windows; Python 3.9 to 3.13 on all three; Node.js 20 to 24; Kotlin on JDK 17 and 21 (plus Windows and macOS); Android emulator tests; weekly advisory run and a newest-Rust canary. All actions are pinned to commit SHAs.
 - Gates: `rustfmt`, `clippy::pedantic` as errors, `ruff` and `mypy` (strict) for Python, `eslint` and `tsc --noEmit` (strict) for Node.js, `ktlint` and `detekt` for Kotlin, `cargo audit`, `cargo deny`, `npm audit`, `pip-audit`, a 90% line-coverage minimum for `msgkit-core`, `cargo-semver-checks`, and a JSON Schema compatibility check (`scripts/schema_compat.py`).
 - Repository hygiene guard (`scripts/check_repo_hygiene.py`) that rejects real exports, databases, secrets, personal e-mail addresses, home paths and realistic phone numbers outside the fixture directories.
-- Dependabot for Cargo, npm, pip, Gradle and GitHub Actions; `deny.toml`; `requirements-dev.txt`; `.gitattributes` for LF line endings.
+- Dependabot for Cargo, npm, pip, Gradle and GitHub Actions; `deny.toml`; `requirements-dev.txt`; `.gitattributes` (LF line endings; CRLF for Windows batch files, LF for `gradlew` and shell scripts).
 
 ### Changed
 - **Minimum supported Rust version raised from 1.85 to 1.88**: `sha2` 0.11 requires it. `hmac` 0.13 and `sha2` 0.11 were updated together (they share `digest` 0.11); signature verification still compares in constant time (`digest` 0.11 uses `ctutils::CtEq`), and known-answer tests (RFC 4231) and pinned id tests guard the behaviour.

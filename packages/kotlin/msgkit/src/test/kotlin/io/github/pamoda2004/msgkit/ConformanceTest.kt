@@ -28,13 +28,13 @@ class ConformanceTest {
         for (char in value) {
             when {
                 char == '"' -> out.append("\\\"")
-                char == '\' -> out.append("\\\\")
-                char == '\b' -> out.append("\b")
-                char == '\u000c' -> out.append("\f")
-                char == '\n' -> out.append("\n")
-                char == '\r' -> out.append("\r")
-                char == '\t' -> out.append("\t")
-                char.code < CONTROL_LIMIT -> out.append("\u%04x".format(char.code))
+                char == '\\' -> out.append("\\\\")
+                char == '\b' -> out.append("\\b")
+                char == '\u000c' -> out.append("\\f")
+                char == '\n' -> out.append("\\n")
+                char == '\r' -> out.append("\\r")
+                char == '\t' -> out.append("\\t")
+                char.code < CONTROL_LIMIT -> out.append("\\u%04x".format(char.code))
                 else -> out.append(char)
             }
         }

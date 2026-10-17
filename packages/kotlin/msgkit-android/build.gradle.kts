@@ -14,7 +14,7 @@ group = "io.github.pamoda2004"
 version = workspaceVersion
 
 android {
-    namespace = "dev.msgkit.android"
+    namespace = "io.github.pamoda2004.msgkit.android"
     compileSdk = 36
 
     defaultConfig {

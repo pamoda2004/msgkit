@@ -1,6 +1,6 @@
-package dev.msgkit
+package io.github.pamoda2004.msgkit
 
-import dev.msgkit.internal.NativeBridge
+import io.github.pamoda2004.msgkit.internal.NativeBridge
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json

@@ -27,7 +27,7 @@ dependencies { implementation("io.github.pamoda2004:msgkit:0.1.0") }
 dependencies { implementation("io.github.pamoda2004:msgkit-android:0.1.0") }
 ```
 
-> The `dev.msgkit` group id is a placeholder. Change `group` in both `build.gradle.kts` files before publishing under your own namespace.
+> The `io.github.pamoda2004.msgkit` group id is a placeholder. Change `group` in both `build.gradle.kts` files before publishing under your own namespace.
 
 ## API
 

@@ -1,4 +1,4 @@
-package dev.msgkit
+package io.github.pamoda2004.msgkit
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable

@@ -37,7 +37,7 @@ dependencies {
     // Exposed in the public API (the native interface is internal, but JNA types
     // surface in stack traces and consumers may need to configure it).
     api("net.java.dev.jna:jna:5.17.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
 
     testImplementation(kotlin("test"))
 }

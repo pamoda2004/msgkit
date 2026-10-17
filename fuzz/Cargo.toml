@@ -1,0 +1,59 @@
+[package]
+name = "msgkit-fuzz"
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "cargo-fuzz targets for msgkit (not part of the main workspace; needs a nightly toolchain)."
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+msgkit-core = { path = "../crates/msgkit-core" }
+serde_json = "1"
+
+# Keep this crate out of the main workspace: it needs nightly and sanitizers.
+[workspace]
+
+[[bin]]
+name = "whatsapp_export"
+path = "fuzz_targets/whatsapp_export.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "facebook_export"
+path = "fuzz_targets/facebook_export.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "device"
+path = "fuzz_targets/device.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "webhooks"
+path = "fuzz_targets/webhooks.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "verify_signature"
+path = "fuzz_targets/verify_signature.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "dispatch"
+path = "fuzz_targets/dispatch.rs"
+test = false
+doc = false
+bench = false

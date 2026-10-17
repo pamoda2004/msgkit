@@ -10,6 +10,7 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 
 ### Added (testing depth, Phase 2)
 - **Conformance suite** (`conformance/`): 49 language-independent cases (input files plus the expected canonical JSON response) that the Rust core, the Python wheel, the Node.js WebAssembly package, the Kotlin/JNA package and the HTTP service must reproduce byte for byte; CI fails on any difference. Covers day/month ambiguity, 12/24-hour clocks, multi-line messages, media and system notices, deleted/edited messages, group chats, Facebook mojibake repair, emoji, Sinhala, Tamil and right-to-left text, very long messages, empty/truncated files, CRLF/LF/BOM variants, the id rules, signatures and error envelopes. See `conformance/README.md`.
+- **Fuzz targets** (`fuzz/`, cargo-fuzz): the WhatsApp and Facebook parsers, the device normalizer, both webhook normalizers, the signature verifier and the JSON entry point, with a seed corpus taken from the conformance cases. CI fuzzes each target for 60 seconds on Linux; `crates/msgkit-core/tests/fuzz_corpus.rs` replays the corpus on every platform.
 
 ### Changed
 - Python: requests to the native library are serialized as compact JSON, so error messages that mention a column are identical in every binding.

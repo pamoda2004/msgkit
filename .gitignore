@@ -49,3 +49,9 @@ node_modules/
 .pytest_cache/
 /coverage/
 /lcov.info
+
+# cargo-mutants output
+mutants.out*/
+fuzz/target/
+fuzz/artifacts/
+fuzz/coverage/

@@ -311,7 +311,7 @@ jobs:
         with:
           api-level: 34
           arch: x86_64
-          script: cd packages/kotlin && ./gradlew :msgkit-android:connectedDebugAndroidTest --console=plain
+          script: sh scripts/ci_android_tests.sh
 
   # Weekly canary: does the newest stable Rust (new clippy lints) still pass? Never blocks a change.
   rust-latest-stable:

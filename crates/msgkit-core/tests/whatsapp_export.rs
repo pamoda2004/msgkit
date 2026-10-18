@@ -183,3 +183,55 @@ fn unknown_notices_are_counted_in_a_warning_without_quoting_them() {
     assert!(report.warnings[0].starts_with("1 line(s) without a sender were ignored"));
     assert!(!report.warnings[0].contains("zxqmarker"));
 }
+
+// ---- Mutation-testing gaps: media placeholders and notices ----------------
+
+fn parse_lines(lines: &[&str]) -> ImportReport {
+    parse(&lines.join("\n"), &WhatsAppExportOptions::default())
+}
+
+#[test]
+fn every_omitted_media_placeholder_maps_to_its_kind() {
+    let r = parse_lines(&[
+        "31/12/2023, 10:00 - Bob: image omitted",
+        "31/12/2023, 10:01 - Bob: video omitted",
+        "31/12/2023, 10:02 - Bob: audio omitted",
+        "31/12/2023, 10:03 - Bob: document omitted",
+        "31/12/2023, 10:04 - Bob: contact card omitted",
+    ]);
+    assert!(r.warnings.is_empty(), "{:?}", r.warnings);
+    let kinds: Vec<_> = messages(&r).iter().map(|m| m.attachments[0].kind).collect();
+    assert_eq!(
+        kinds,
+        [
+            AttachmentKind::Image,
+            AttachmentKind::Video,
+            AttachmentKind::Audio,
+            AttachmentKind::File,
+            AttachmentKind::Other,
+        ]
+    );
+}
+
+#[test]
+fn left_and_joined_lines_are_known_notices_not_ignored_lines() {
+    let r = parse_lines(&["31/12/2023, 10:00 - Alex left", "31/12/2023, 10:01 - Sam joined"]);
+    assert_eq!(r.events.len(), 0);
+    assert_eq!(r.warnings, Vec::<String>::new(), "known notices are not warnings");
+}
+
+#[test]
+fn notice_with_a_later_colon_is_not_a_sender() {
+    // Known phrase, no quote character.
+    let r = parse_lines(&["31/12/2023, 10:00 - Alex added Sam: Lee"]);
+    assert!(r.events.is_empty(), "{:?}", r.events);
+
+    // Quote character, no known phrase.
+    let r = parse_lines(&["31/12/2023, 10:00 - Jo set the topic to \"A: B\""]);
+    assert!(r.events.is_empty(), "{:?}", r.events);
+
+    // A quote in the body of a real message does not make the line a notice.
+    let r = parse_lines(&["31/12/2023, 10:00 - Alice: she said \"hi: there\""]);
+    assert_eq!(messages(&r).len(), 1);
+    assert_eq!(messages(&r)[0].sender.id, "Alice");
+}

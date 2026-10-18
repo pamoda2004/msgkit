@@ -186,3 +186,80 @@ fn dispatch_end_to_end() {
     let out: serde_json::Value = serde_json::from_str(&api::dispatch("verify_signature", &input)).unwrap();
     assert_eq!(out["data"]["valid"], true);
 }
+
+// ---- Mutation-testing gaps: attachment kinds and call detection -----------
+
+#[test]
+fn whatsapp_webhook_maps_every_media_type_to_its_kind() {
+    let msg = |id: &str, kind: &str| serde_json::json!({ "from": "94771234567", "id": id, "timestamp": "1704067200", "type": kind, kind: { "id": "M" } });
+    let payload = serde_json::json!({
+        "object": "whatsapp_business_account",
+        "entry": [{ "id": "W", "changes": [{ "field": "messages", "value": {
+            "metadata": { "display_phone_number": "15550100111", "phone_number_id": "1" },
+            "messages": [
+                msg("a", "image"), msg("b", "sticker"), msg("c", "video"), msg("d", "audio"),
+                msg("e", "voice"), msg("f", "document"),
+            ]
+        }}]}]
+    });
+    let r = webhook::normalize_whatsapp(&payload).unwrap();
+    let kinds: Vec<_> = messages(&r).iter().map(|m| m.attachments[0].kind).collect();
+    assert_eq!(
+        kinds,
+        [
+            AttachmentKind::Image,
+            AttachmentKind::Image,
+            AttachmentKind::Video,
+            AttachmentKind::Audio,
+            AttachmentKind::Audio,
+            AttachmentKind::File,
+        ]
+    );
+}
+
+#[test]
+fn messenger_webhook_maps_every_attachment_type_to_its_kind() {
+    let attachments: Vec<_> = ["image", "video", "audio", "file", "location"]
+        .iter()
+        .map(|t| serde_json::json!({ "type": t, "payload": { "url": "https://example.com/x" } }))
+        .collect();
+    let payload = serde_json::json!({
+        "object": "page",
+        "entry": [{ "messaging": [{
+            "sender": { "id": "USER1" }, "recipient": { "id": "PAGE" }, "timestamp": 1_704_067_200_000_i64,
+            "message": { "mid": "m1", "attachments": attachments }
+        }]}]
+    });
+    let r = webhook::normalize_messenger(&payload).unwrap();
+    let kinds: Vec<_> = messages(&r)[0].attachments.iter().map(|a| a.kind).collect();
+    assert_eq!(
+        kinds,
+        [
+            AttachmentKind::Image,
+            AttachmentKind::Video,
+            AttachmentKind::Audio,
+            AttachmentKind::File,
+            AttachmentKind::Other,
+        ]
+    );
+}
+
+#[test]
+fn facebook_call_is_detected_by_type_alone_or_by_duration_alone() {
+    let json = serde_json::json!({
+        "participants": [{ "name": "Alice" }, { "name": "Bob" }],
+        "messages": [
+            { "sender_name": "Bob", "timestamp_ms": 1_704_067_200_000_i64, "type": "Call" },
+            { "sender_name": "Bob", "timestamp_ms": 1_704_067_260_000_i64, "type": "Generic", "call_duration": 30 },
+            { "sender_name": "Bob", "timestamp_ms": 1_704_067_320_000_i64, "type": "Generic", "content": "hi" },
+        ]
+    })
+    .to_string();
+    let r = facebook::parse(&json, &FacebookExportOptions::default()).unwrap();
+    let c = calls(&r);
+    assert_eq!(c.len(), 2, "one call by type, one by duration");
+    assert_eq!(c[0].outcome, CallOutcome::Missed);
+    assert_eq!(c[1].outcome, CallOutcome::Answered);
+    assert_eq!(c[1].duration_secs, 30);
+    assert_eq!(messages(&r).len(), 1);
+}

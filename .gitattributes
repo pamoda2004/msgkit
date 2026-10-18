@@ -21,3 +21,6 @@ gradlew text eol=lf
 
 # Conformance cases must keep their bytes (CRLF, byte order marks, ...): never normalize them.
 conformance/** -text
+
+# Fuzz seeds are raw bytes.
+fuzz/corpus/** -text

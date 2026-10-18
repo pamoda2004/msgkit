@@ -1,0 +1,6 @@
+{
+  "op": "parse_whatsapp_export",
+  "input": { "options": { "date_order": "dmy" } },
+  "files": { "text": "chat.txt" },
+  "note": "System notices that contain a colon (a quoted group name) are not messages from a fake participant; only the two Sam lines are messages and nothing warns"
+}

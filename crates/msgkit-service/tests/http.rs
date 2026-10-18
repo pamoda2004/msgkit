@@ -273,3 +273,40 @@ async fn subscription_handshake() {
     let uri = "/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=nope&hub.challenge=12345";
     assert_eq!(send(&app, Request::get(uri).body(Body::empty()).unwrap()).await.0, StatusCode::FORBIDDEN);
 }
+
+/// Error responses must never repeat the request (message content may be in the body or the query string).
+#[tokio::test]
+async fn error_responses_do_not_echo_the_request() {
+    const MARKER: &str = "ZXQMARKERZXQ";
+    let json_requests = [
+        ("/v1/import/facebook-export", format!("{{\"messages\": [\"{MARKER}\"")),
+        ("/v1/import/facebook-export", format!("\"{MARKER}\"")),
+        ("/v1/import/facebook-export", format!("{{\"messages\": \"{MARKER}\"}}")),
+        ("/v1/import/device", format!("{{\"sms\": [{{\"address\": \"{MARKER}\"}}]}}")),
+        ("/v1/import/device", format!("{{\"sms\": \"{MARKER}\"}}")),
+        ("/v1/import/device", MARKER.to_owned()),
+    ];
+    for (path, body) in json_requests {
+        let req = Request::post(path)
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body))
+            .unwrap();
+        let (status, text) = send(&app(None), req).await;
+        assert!(status.is_client_error(), "{path} accepted a malformed body: {status}");
+        assert!(!text.contains(MARKER), "{path} echoed the body: {text}");
+    }
+    let queries = [
+        format!("/v1/import/whatsapp-export?date_order={MARKER}"),
+        format!("/v1/import/whatsapp-export?utc_offset_minutes={MARKER}"),
+        format!("/v1/import/device?default_country_code={MARKER}&own_number[]={MARKER}"),
+        format!("/v1/import/facebook-export?{MARKER}={MARKER}"),
+    ];
+    for path in queries {
+        let req = Request::post(path.clone())
+            .header(header::CONTENT_TYPE, "text/plain")
+            .body(Body::from("{}"))
+            .unwrap();
+        let (_, text) = send(&app(None), req).await;
+        assert!(!text.contains(MARKER), "{path} echoed the query: {text}");
+    }
+}

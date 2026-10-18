@@ -1,0 +1,5 @@
+{
+  "op": "parse_whatsapp_export",
+  "input": { "text": "x", "options": { "date_order": "PRIVATE-VALUE-MUST-NOT-APPEAR" } },
+  "note": "The error names the problem and the position, never the offending value"
+}

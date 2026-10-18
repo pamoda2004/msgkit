@@ -320,11 +320,16 @@ jobs:
     name: Fuzz (60 s per target)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # A dated nightly keeps results reproducible. RUSTUP_TOOLCHAIN also overrides rust-toolchain.toml, which
+      # pins the stable release and would otherwise reject the sanitizer flags. Bump the date deliberately.
+      FUZZ_NIGHTLY: nightly-2026-10-14
+      RUSTUP_TOOLCHAIN: nightly-2026-10-14
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
-          toolchain: nightly
+          toolchain: nightly-2026-10-14
       - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
         with:
           tool: cargo-fuzz

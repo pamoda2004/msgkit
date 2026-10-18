@@ -157,3 +157,29 @@ fn impossible_dates_are_skipped_with_a_warning() {
     assert_eq!(messages(&r).len(), 1);
     assert!(r.warnings.iter().any(|w| w.contains("could not be parsed")));
 }
+
+#[test]
+fn notices_with_a_colon_do_not_create_fake_participants() {
+    let text = "01/02/2024, 10:00 - Alex changed the subject from \"Team: Alpha\" to \"Team: Beta\"\n\
+                01/02/2024, 10:01 - Alex created group \"Plans: 2024\"\n\
+                01/02/2024, 10:02 - Sam: hello: there\n";
+    let report = parse(
+        text,
+        &WhatsAppExportOptions { date_order: DateOrder::Dmy, ..WhatsAppExportOptions::default() },
+    );
+    let senders: Vec<_> = messages(&report).iter().map(|m| m.sender.id.clone()).collect();
+    assert_eq!(senders, ["Sam"]);
+    assert_eq!(report.warnings, Vec::<String>::new(), "known notices are not warnings");
+}
+
+#[test]
+fn unknown_notices_are_counted_in_a_warning_without_quoting_them() {
+    let text = "01/02/2024, 10:00 - Priya joined the secret club zxqmarker\n01/02/2024, 10:01 - Sam: hi\n";
+    let report = parse(
+        text,
+        &WhatsAppExportOptions { date_order: DateOrder::Dmy, ..WhatsAppExportOptions::default() },
+    );
+    assert_eq!(report.warnings.len(), 1);
+    assert!(report.warnings[0].starts_with("1 line(s) without a sender were ignored"));
+    assert!(!report.warnings[0].contains("zxqmarker"));
+}

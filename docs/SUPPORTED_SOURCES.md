@@ -17,6 +17,8 @@ Export format caveats:
 * Time resolution is one minute (one second on iOS). Identical messages in the same minute get ordinal-disambiguated ids.
 * Media is not included in the text file; attachments are recorded as references with the file name when available.
 * Call history is not part of the export other than "Missed voice/video call" notices.
+* **Known limitation: deleted and edited messages are not modelled.** A message deleted by its sender appears in the export as ordinary text (`This message was deleted`, `You deleted this message`), and msgkit imports that text as the message body, exactly like any other message. The `<This message was edited>` marker is removed from the body, and nothing records that the message was edited. Consumers that need to know should compare the body against these placeholder texts themselves. Modelling deletion and editing as lifecycle events is planned for Phase 6 and will be additive; the current behaviour is pinned by the conformance case `whatsapp_deleted_and_edited`.
+* **Known limitation: English system notices only.** Lines without a sender are recognized as notices only in English. Notices in other languages are counted in a warning, never imported and never quoted.
 
 ## Messenger / Facebook
 

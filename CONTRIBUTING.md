@@ -26,6 +26,8 @@ Every change must pass the same gates locally and in CI (`.github/workflows/ci.y
 | Python | `pip install -r requirements-dev.txt` then `ruff check .` · `ruff format --check .` · `mypy` · `python -m unittest discover -s packages/python/tests` |
 | Node.js | in `packages/node`: `npm ci` · `npm run lint` · `npm run typecheck` · `npm test` · `npm audit` |
 | Kotlin | in `packages/kotlin`: `./gradlew ktlintCheck detekt :msgkit:test` (`./gradlew ktlintFormat` fixes style) |
+| Fuzzing (nightly, Linux/macOS) | `cargo install cargo-fuzz` then `cargo fuzz run whatsapp_export -- -max_total_time=60` (targets: `cargo fuzz list`); the seed corpus in `fuzz/corpus` is also replayed on stable by `cargo test -p msgkit-core --test fuzz_corpus` |
+| Mutation testing | `cargo mutants -p msgkit-core` (slow; review surviving mutants) |
 
 Notes:
 

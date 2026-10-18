@@ -313,6 +313,42 @@ jobs:
           arch: x86_64
           script: sh scripts/ci_android_tests.sh
 
+  # Short fuzz run of every parser and the webhook verifier (cargo-fuzz needs nightly and Linux). Seeds live in
+  # fuzz/corpus and are also replayed on every platform by crates/msgkit-core/tests/fuzz_corpus.rs. When a run
+  # finds a crash, the input is uploaded as an artifact; add it to the matching corpus directory as a regression.
+  fuzz:
+    name: Fuzz (60 s per target)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # A dated nightly keeps results reproducible. RUSTUP_TOOLCHAIN also overrides rust-toolchain.toml, which
+      # pins the stable release and would otherwise reject the sanitizer flags. Bump the date deliberately.
+      FUZZ_NIGHTLY: nightly-2026-10-14
+      RUSTUP_TOOLCHAIN: nightly-2026-10-14
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: nightly-2026-10-14
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+        with:
+          tool: cargo-fuzz
+      - name: Fuzz every target
+        run: |
+          for target in $(cargo fuzz list); do
+            echo "::group::fuzz $target"
+            # The cargo-fuzz release binary is built for musl and would default to that target, which the
+            # sanitizers do not support; build for the glibc host instead.
+            cargo fuzz run --target x86_64-unknown-linux-gnu "$target" -- -max_total_time=60 -rss_limit_mb=2048 -timeout=10
+            echo "::endgroup::"
+          done
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: failure()
+        with:
+          name: fuzz-crashes
+          path: fuzz/artifacts
+          if-no-files-found: ignore
+
   # Weekly canary: does the newest stable Rust (new clippy lints) still pass? Never blocks a change.
   rust-latest-stable:
     name: Rust latest stable (canary)

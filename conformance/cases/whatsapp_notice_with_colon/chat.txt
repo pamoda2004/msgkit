@@ -1,0 +1,6 @@
+01/02/2024, 10:00 - Alex changed the subject from "Team: Alpha" to "Team: Beta"
+01/02/2024, 10:01 - Sam: has a colon: and mentions that Alex created group Plans
+01/02/2024, 10:02 - Alex created group "Plans: 2024"
+01/02/2024, 10:03 - Sam added Priya
+01/02/2024, 10:04 - Priya joined using this group's invite link
+01/02/2024, 10:05 - Sam: ok

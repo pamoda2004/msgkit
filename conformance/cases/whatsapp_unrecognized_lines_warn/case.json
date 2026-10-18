@@ -1,0 +1,6 @@
+{
+  "op": "parse_whatsapp_export",
+  "input": { "options": { "date_order": "dmy" } },
+  "files": { "text": "chat.txt" },
+  "note": "Notices in a language the parser does not know are counted in a warning, not dropped silently (F08/F09); the warning contains no text"
+}

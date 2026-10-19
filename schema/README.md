@@ -26,3 +26,7 @@ pip install datamodel-code-generator && datamodel-codegen --input schema/event.s
 ```
 
 Consumers should **ignore unknown fields** so additive (minor) schema changes do not break them.
+
+## Versioning
+
+Every file carries the version of the contract it was generated for in the top-level key `x-msgkit-schema-version` (the same value the `version` operation reports as `schema_version`). Within one major version the schemas change only additively; removals need a new major version. The full rules, for msgkit and for readers, are in [docs/SCHEMA_POLICY.md](../docs/SCHEMA_POLICY.md).

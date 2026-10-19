@@ -213,5 +213,6 @@
     },
     "title": "WhatsAppExportOptions",
     "type": "object"
-  }
+  },
+  "x-msgkit-schema-version": "1.0.0"
 }

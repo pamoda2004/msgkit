@@ -276,5 +276,6 @@
       "type": "object"
     }
   ],
-  "title": "Event"
+  "title": "Event",
+  "x-msgkit-schema-version": "1.0.0"
 }

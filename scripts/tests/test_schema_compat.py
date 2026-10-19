@@ -107,5 +107,40 @@ class VersionParsing(unittest.TestCase):
         self.assertIsNotNone(sc.parse_version(text))
 
 
+class VersionRules(unittest.TestCase):
+    def test_no_schema_change_needs_no_bump(self) -> None:
+        self.assertEqual(sc.version_problems((1, 0, 0), (1, 0, 0), breaking=False, additive=False), [])
+
+    def test_additive_change_needs_a_minor_bump(self) -> None:
+        self.assertEqual(len(sc.version_problems((1, 0, 0), (1, 0, 0), breaking=False, additive=True)), 1)
+        self.assertEqual(len(sc.version_problems((1, 0, 0), (1, 0, 1), breaking=False, additive=True)), 1)
+        self.assertEqual(sc.version_problems((1, 0, 0), (1, 1, 0), breaking=False, additive=True), [])
+        self.assertEqual(sc.version_problems((1, 4, 2), (2, 0, 0), breaking=False, additive=True), [])
+
+    def test_breaking_change_needs_a_major_bump(self) -> None:
+        self.assertEqual(len(sc.version_problems((1, 0, 0), (1, 5, 0), breaking=True, additive=False)), 1)
+        self.assertEqual(sc.version_problems((1, 5, 0), (2, 0, 0), breaking=True, additive=True), [])
+
+    def test_the_version_never_goes_backwards(self) -> None:
+        self.assertEqual(len(sc.version_problems((1, 2, 0), (1, 1, 0), breaking=False, additive=False)), 1)
+
+    def test_unknown_versions_are_not_judged(self) -> None:
+        self.assertEqual(sc.version_problems(None, (1, 0, 0), breaking=True, additive=True), [])
+
+
+class VersionMarker(unittest.TestCase):
+    def test_every_schema_file_declares_the_repository_version(self) -> None:
+        lib = (ROOT / "crates" / "msgkit-core" / "src" / "lib.rs").read_text(encoding="utf-8")
+        declared = ".".join(map(str, sc.parse_version(lib) or ()))
+        for name in ("event.schema.json", "import-report.schema.json", "options.schema.json"):
+            self.assertEqual(sc.marker_version(load(name)), declared, name)
+
+    def test_the_marker_is_not_a_definition(self) -> None:
+        bundle = load("options.schema.json")
+        without = {k: v for k, v in bundle.items() if k != sc.VERSION_KEY}
+        self.assertEqual(sc.compare(without, bundle, "input"), [])
+        self.assertEqual(sc.collect(without).keys(), sc.collect(bundle).keys())
+
+
 if __name__ == "__main__":
     unittest.main()

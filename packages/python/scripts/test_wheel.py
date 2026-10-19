@@ -10,6 +10,7 @@ Needs a Rust toolchain and the ``build`` package.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import tempfile
@@ -33,6 +34,12 @@ def main() -> None:
         wheels = sorted(wheelhouse.glob("msgkit_core-*.whl"))
         if len(wheels) != 1:
             raise SystemExit(f"expected exactly one wheel, found {wheels}")
+        line = f"python wheel: {wheels[0].name} {wheels[0].stat().st_size} bytes"
+        print("SIZE", line, flush=True)
+        summary = os.environ.get("GITHUB_STEP_SUMMARY")
+        if summary:
+            with open(summary, "a", encoding="utf-8") as f:
+                f.write(line + "\n")
 
         venv = tmp_path / "venv"
         run([sys.executable, "-m", "venv", str(venv)])

@@ -62,7 +62,7 @@ pub struct DeviceOptions {
     /// The device owner's own number, recorded as the other party of each
     /// message. Optional.
     pub own_number: Option<String>,
-    /// Calling code (digits) for national numbers such as `0771234567`.
+    /// Calling code (digits) for national numbers such as `0700000000`.
     pub default_country_code: Option<String>,
 }
 

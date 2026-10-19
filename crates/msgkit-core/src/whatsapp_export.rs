@@ -44,9 +44,10 @@ pub struct WhatsAppExportOptions {
     /// The exporting user's name as it appears in the chat. Used to decide
     /// message direction; without it direction is `unknown`.
     pub self_name: Option<String>,
+    /// Default `auto`: inferred from the data, falling back to day-first with a warning.
     pub date_order: DateOrder,
     /// Offset of the phone's local time zone from UTC, in minutes
-    /// (e.g. `330` for UTC+05:30). Defaults to `0`.
+    /// (e.g. `330` for UTC+05:30). Exports carry no time zone. Defaults to `0`.
     pub utc_offset_minutes: i32,
     pub conversation_id: Option<String>,
     /// Calling code (digits, e.g. `"94"`) used to normalize sender names that

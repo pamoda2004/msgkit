@@ -90,6 +90,7 @@
         },
         "raw": true,
         "timestamp": {
+          "description": "ISO 8601, always UTC (for example `2024-01-01T00:00:00Z`).",
           "format": "date-time",
           "type": "string"
         },
@@ -199,7 +200,7 @@
           "type": "string"
         },
         "raw": {
-          "description": "The untouched source payload, kept so records can be re-parsed later."
+          "description": "The untouched source payload (webhook events only), kept so records can be re-parsed later."
         },
         "recipients": {
           "default": [],
@@ -212,7 +213,7 @@
           "$ref": "#/$defs/Participant"
         },
         "timestamp": {
-          "description": "Always UTC.",
+          "description": "ISO 8601, always UTC (for example `2024-01-01T00:00:00Z`).",
           "format": "date-time",
           "type": "string"
         }
@@ -236,7 +237,7 @@
           ]
         },
         "id": {
-          "description": "Stable identifier. An E.164 phone number (`+94771234567`) when one is\nknown, otherwise the platform's own id or the display name.",
+          "description": "Stable identifier. An E.164 phone number (`+94700000000`) when one is\nknown, otherwise the platform's own id or the display name.",
           "type": "string"
         }
       },
@@ -247,7 +248,7 @@
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Anything msgkit can import.",
+  "description": "Anything msgkit can import: a message or a call.",
   "oneOf": [
     {
       "$ref": "#/$defs/Message",

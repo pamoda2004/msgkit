@@ -33,6 +33,8 @@ Stable. New operations may be added; `version().operations` lists what a build s
 
 The `normalize_*_webhook` operations do not verify signatures; verify first.
 
+**Integrator entry points are stable in every binding:** signature verification (`verify_signature`), the export importers (`parse_whatsapp_export`, `parse_facebook_export`), the device importer (`normalize_device`) and the webhook normalizers (`normalize_*_webhook`) are marked stable in the Rust, Python, Node.js and Kotlin tables below, in the C and WebAssembly ABIs (through `msgkit_call`), in the HTTP service (`/v1/import/*`, `/webhooks/*`) and in the command line.
+
 ## Rust (`msgkit-core`)
 
 | Item | Level | Notes |

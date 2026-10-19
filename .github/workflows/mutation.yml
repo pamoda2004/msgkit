@@ -1,0 +1,57 @@
+name: Mutation testing
+
+# A full run takes about 35 minutes, so it is not part of CI and not a required check. It runs weekly and on demand,
+# and fails when a mutant survives (a missing assertion): read the artifact, then add a test (CONTRIBUTING.md).
+on:
+  schedule:
+    - cron: "43 3 * * 0" # weekly, Sunday
+  workflow_dispatch:
+
+concurrency:
+  group: mutation-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_VERSION: "1.99.0" # keep in sync with rust-toolchain.toml
+  CARGO_MUTANTS_VERSION: "27.1.0"
+
+jobs:
+  mutants:
+    name: Mutation testing (msgkit-core)
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+        with:
+          tool: cargo-mutants@${{ env.CARGO_MUTANTS_VERSION }}
+      - name: Run mutants
+        run: cargo mutants -p msgkit-core --cargo-arg=--locked -j 3 --timeout 120 --output mutation-out
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Mutation testing (msgkit-core)"
+            for f in caught missed timeout unviable; do
+              echo "- $f: $(wc -l < "mutation-out/mutants.out/$f.txt" 2>/dev/null || echo n/a)"
+            done
+            echo
+            echo "Surviving mutants (a test is missing for each):"
+            echo '```'
+            cat mutation-out/mutants.out/missed.txt mutation-out/mutants.out/timeout.txt 2>/dev/null || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: mutants-out
+          path: mutation-out/mutants.out
+          retention-days: 30

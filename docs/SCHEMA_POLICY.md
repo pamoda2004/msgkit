@@ -38,6 +38,13 @@ A program that reads msgkit's JSON (or sends it options) must:
 
 msgkit itself follows the matching writer rules: the output of any `1.x` build validates against the `1.0` required properties, new output properties are optional, and a new input option is optional with a default that keeps the old behaviour (so existing callers and existing event ids do not change).
 
+## Data that is behaviour but not schema
+
+Some behaviour comes from data bundled with msgkit rather than from the schema. The IANA time-zone database behind
+`time_zone` is the case today: a new release can change the UTC instant computed for a local time in some zones
+without any schema change. It is pinned exactly and a new release is reviewed and recorded as a behaviour change
+(CONTRIBUTING.md, "Time-zone data"); the `version` operation reports the bundled release as `tzdata_version`.
+
 ## How the rules are enforced
 
 * **Drift test** (`cargo test -p msgkit-core --test schema`): the schema files must equal what the Rust types generate, including the version marker.

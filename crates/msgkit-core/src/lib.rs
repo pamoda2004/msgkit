@@ -22,12 +22,14 @@ pub mod id;
 pub mod model;
 pub mod phone;
 pub mod store;
+mod tz;
 pub mod webhook;
 pub mod whatsapp_export;
 
 pub use error::{Error, Result};
 pub use model::*;
+pub use tz::tzdata_version;
 
 /// Version of the JSON data contract (`schema/`). Bumped independently of the
 /// crate version: minor for additive changes, major for breaking ones.
-pub const SCHEMA_VERSION: &str = "1.0.0";
+pub const SCHEMA_VERSION: &str = "1.1.0";

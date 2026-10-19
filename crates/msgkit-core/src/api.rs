@@ -75,10 +75,11 @@ fn run(op: &str, input: &str) -> Result<Value> {
             "crate_version": env!("CARGO_PKG_VERSION"),
             "schema_version": SCHEMA_VERSION,
             "operations": OPERATIONS,
+            "tzdata_version": crate::tzdata_version(),
         })),
         "parse_whatsapp_export" => {
             let i: WhatsAppExportInput = serde_json::from_str(input)?;
-            report_json(whatsapp_export::parse(&i.text, &i.options))
+            report_json(whatsapp_export::try_parse(&i.text, &i.options)?)
         }
         "parse_facebook_export" => {
             let i: FacebookExportInput = serde_json::from_str(input)?;

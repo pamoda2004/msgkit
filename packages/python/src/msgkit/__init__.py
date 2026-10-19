@@ -56,13 +56,17 @@ def parse_whatsapp_export(
     utc_offset_minutes: Optional[int] = None,
     conversation_id: Optional[str] = None,
     default_country_code: Optional[str] = None,
+    time_zone: Optional[str] = None,
 ) -> ImportReport:
     """Parses a WhatsApp "Export chat" text file.
 
     ``self_name`` is the exporting user's name as shown in the chat and sets
     message direction. ``utc_offset_minutes`` is the phone's UTC offset (for
-    example 330 for UTC+05:30); exports carry no time zone. ``date_order`` is
-    ``"auto"`` (default), ``"dmy"`` or ``"mdy"``.
+    example 330 for UTC+05:30); exports carry no time zone. ``time_zone`` is an
+    exact IANA name such as ``"Asia/Colombo"``; it replaces ``utc_offset_minutes``
+    and follows the zone's daylight-saving rules (an unknown name raises
+    ``MsgkitError`` with code ``invalid_input``). ``date_order`` is ``"auto"``
+    (default), ``"dmy"`` or ``"mdy"``.
     """
     options = _options(
         self_name=self_name,
@@ -70,6 +74,7 @@ def parse_whatsapp_export(
         utc_offset_minutes=utc_offset_minutes,
         conversation_id=conversation_id,
         default_country_code=default_country_code,
+        time_zone=time_zone,
     )
     return cast(ImportReport, dispatch("parse_whatsapp_export", {"text": text, "options": options}))
 

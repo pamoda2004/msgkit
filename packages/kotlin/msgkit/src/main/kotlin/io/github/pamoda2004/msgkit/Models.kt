@@ -195,12 +195,20 @@ public data class WhatsAppExportOptions(
     @SerialName("date_order") val dateOrder: DateOrder = DateOrder.AUTO,
     /**
      * Offset of the phone's local time zone from UTC, in minutes (e.g. `330` for UTC+05:30). Exports
-     * carry no time zone. Defaults to `0`.
+     * carry no time zone. Defaults to `0`. Ignored when `time_zone` is set.
      */
     @SerialName("utc_offset_minutes") val utcOffsetMinutes: Int = 0,
     @SerialName("conversation_id") val conversationId: String? = null,
     /** Calling code (digits, e.g. `"94"`) used to normalize sender names that are national phone numbers. */
     @SerialName("default_country_code") val defaultCountryCode: String? = null,
+    /**
+     * IANA time-zone name of the phone (exact spelling, e.g. `"Asia/Colombo"`). When set it replaces
+     * `utc_offset_minutes` and follows the zone's daylight-saving rules; event ids do not depend on
+     * it. A time in a repeated hour uses the first occurrence and a time in a skipped hour moves
+     * forward by the gap (reported in one warning). The zone database is bundled with msgkit, so
+     * results are the same everywhere.
+     */
+    @SerialName("time_zone") val timeZone: String? = null,
 )
 
 @Serializable
@@ -261,4 +269,6 @@ public data class VersionInfo(
     @SerialName("crate_version") val crateVersion: String,
     @SerialName("schema_version") val schemaVersion: String,
     val operations: List<String> = emptyList(),
+    /** Version of the bundled IANA time-zone database (for example `2026e`). */
+    @SerialName("tzdata_version") val tzdataVersion: String = "unknown",
 )

@@ -111,6 +111,15 @@ async fn http_error_responses_carry_stable_codes() {
             "the query string is invalid",
         ),
         case(
+            "unknown time zone in the query",
+            None,
+            true,
+            post("/v1/import/whatsapp-export?time_zone=Mars%2FPhobos", "text/plain", b"x"),
+            StatusCode::BAD_REQUEST,
+            codes::INVALID_INPUT,
+            "invalid input: unknown or unsupported time_zone (use an exact IANA name such as Asia/Colombo)",
+        ),
+        case(
             "missing bearer token",
             Some("tok"),
             true,

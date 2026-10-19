@@ -27,9 +27,25 @@ class MsgkitTest {
     @Test
     fun `versions agree with the Rust workspace`() {
         val info = Msgkit.version()
-        assertEquals("1.0.0", info.schemaVersion)
+        assertEquals("1.1.0", info.schemaVersion)
         assertEquals(System.getProperty("msgkit.workspaceVersion"), info.crateVersion)
         assertTrue("parse_whatsapp_export" in info.operations)
+        assertTrue(info.tzdataVersion.matches(Regex("""\d{4}[a-z]""")), info.tzdataVersion)
+    }
+
+    @Test
+    fun `time zone follows daylight saving and an unknown zone is invalid input`() {
+        val text = "15/01/2024, 12:00 - A: x\n15/07/2024, 12:00 - A: y\n"
+        val options = WhatsAppExportOptions(dateOrder = DateOrder.DMY, timeZone = "America/New_York")
+        val r = Msgkit.parseWhatsAppExport(text, options)
+        assertEquals(listOf("2024-01-15T17:00:00Z", "2024-07-15T16:00:00Z"), r.events.map { it.timestamp })
+
+        val e =
+            assertFailsWith<MsgkitException> {
+                Msgkit.parseWhatsAppExport(text, WhatsAppExportOptions(timeZone = "Mars/Phobos"))
+            }
+        assertEquals("invalid_input", e.code)
+        assertTrue("Phobos" !in e.message.orEmpty())
     }
 
     @Test

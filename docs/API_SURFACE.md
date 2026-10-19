@@ -43,7 +43,8 @@ The `normalize_*_webhook` operations do not verify signatures; verify first.
 | `SCHEMA_VERSION` | Stable | |
 | `Error`, `Result`, `Error::code` | Stable | The codes are listed under [Error codes](#error-codes). The variants of `Error` may grow, so match with a wildcard arm. |
 | `api::dispatch`, `api::OPERATIONS` | Stable | The JSON entry point used by every other binding. |
-| `whatsapp_export::{parse, WhatsAppExportOptions, DateOrder}` | Stable | |
+| `whatsapp_export::{parse, try_parse, WhatsAppExportOptions, DateOrder}` | Stable | `try_parse` refuses an unknown `time_zone`; `parse` warns and falls back to `utc_offset_minutes`. |
+| `tzdata_version()` | Stable | The bundled IANA time-zone database release, also reported by the `version` operation. |
 | `facebook::{parse, parse_value, FacebookExportOptions}` | Stable | |
 | `device::{normalize, DeviceBatch, DeviceOptions, RawSms, RawCall}` | Stable | |
 | `webhook::{normalize_whatsapp, normalize_messenger, verify_signature}` | Stable | |

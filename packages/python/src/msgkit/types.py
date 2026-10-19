@@ -98,11 +98,17 @@ class WhatsAppExportOptions(TypedDict, total=False):
     # Default `auto`: inferred from the data, falling back to day-first with a warning.
     date_order: DateOrder
     # Offset of the phone's local time zone from UTC, in minutes (e.g. `330` for UTC+05:30). Exports carry
-    # no time zone. Defaults to `0`.
+    # no time zone. Defaults to `0`. Ignored when `time_zone` is set.
     utc_offset_minutes: int
     conversation_id: Optional[str]
     # Calling code (digits, e.g. `"94"`) used to normalize sender names that are national phone numbers.
     default_country_code: Optional[str]
+    # IANA time-zone name of the phone (exact spelling, e.g. `"Asia/Colombo"`). When set it replaces
+    # `utc_offset_minutes` and follows the zone's daylight-saving rules; event ids do not depend on it. A
+    # time in a repeated hour uses the first occurrence and a time in a skipped hour moves forward by the
+    # gap (reported in one warning). The zone database is bundled with msgkit, so results are the same
+    # everywhere.
+    time_zone: Optional[str]
 
 
 class FacebookExportOptions(TypedDict, total=False):
@@ -161,3 +167,4 @@ class VersionInfo(TypedDict):
     crate_version: str
     schema_version: str
     operations: List[str]
+    tzdata_version: str  # version of the bundled IANA time-zone database, e.g. "2026e"

@@ -11,7 +11,7 @@ msgkit only uses sources the platforms and the device owner permit. If a source 
 | Personal account, programmatically | ❌ | ❌ | No official API. Libraries that automate WhatsApp Web/multi-device violate WhatsApp's terms and get accounts banned. msgkit will not add one. |
 
 Export format caveats:
-* Timestamps carry **no time zone**; pass `utc_offset_minutes`.
+* Timestamps carry **no time zone**; pass `time_zone` (an exact IANA name such as `Asia/Colombo`, resolved with a database bundled in msgkit, daylight saving included) or, for a fixed offset, `utc_offset_minutes`. `time_zone` wins when both are given. A local time that does not exist (clocks forward) moves forward by the gap, a repeated one (clocks back) uses its first occurrence, and one warning counts both. Event ids never depend on the time zone.
 * **Day/month order** differs by phone locale. `date_order: auto` infers it when any date has a day above 12; otherwise it assumes day-first and emits a warning. Set `dmy` or `mdy` explicitly for ambiguous files.
 * Senders are **display names** (or numbers for non-contacts); the export has no stable ids.
 * Time resolution is one minute (one second on iOS). Identical messages in the same minute get ordinal-disambiguated ids.

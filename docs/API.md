@@ -17,7 +17,7 @@ Import operations return `data = {"events": [Event...], "warnings": [string...]}
 
 | Operation | Input | Output `data` |
 |---|---|---|
-| `version` | `{}` | `{crate_version, schema_version, operations}` |
+| `version` | `{}` | `{crate_version, schema_version, operations, tzdata_version}` |
 | `parse_whatsapp_export` | `{"text": "<file contents>", "options": WhatsAppExportOptions}` | import report |
 | `parse_facebook_export` | `{"thread": <parsed message_N.json>, "options": FacebookExportOptions}` | import report |
 | `normalize_device` | `{"batch": DeviceBatch, "options": DeviceOptions}` | import report |

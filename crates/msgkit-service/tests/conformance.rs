@@ -71,10 +71,12 @@ async fn the_http_service_matches_the_import_cases() {
         };
         let options = &spec["input"]["options"];
         let (path, content_type, body) = match spec["op"].as_str().unwrap() {
-            "parse_whatsapp_export" if !expects_error => {
+            "parse_whatsapp_export" => {
                 let text = read(&spec["files"], "text")
                     .or_else(|| spec["input"]["text"].as_str().map(str::to_owned));
-                ("/v1/import/whatsapp-export", "text/plain; charset=utf-8", text.unwrap())
+                // Error cases that fail before the text is read (a missing `text`) have no HTTP equivalent.
+                let Some(text) = text else { continue };
+                ("/v1/import/whatsapp-export", "text/plain; charset=utf-8", text)
             }
             "parse_facebook_export" => {
                 let thread = read(&spec["json_files"], "thread")
@@ -121,6 +123,6 @@ async fn the_http_service_matches_the_import_cases() {
         checked += 1;
     }
     assert!(checked >= 25, "only {checked} cases were checked over HTTP");
-    assert!(checked_errors >= 3, "only {checked_errors} error cases were checked over HTTP");
+    assert!(checked_errors >= 7, "only {checked_errors} error cases were checked over HTTP");
     assert!(failures.is_empty(), "HTTP conformance failures:\n{}", failures.join("\n"));
 }

@@ -10,7 +10,7 @@
 //! ```
 //!
 //! Known limits (also documented in `docs/SUPPORTED_SOURCES.md`):
-//! * Timestamps have no time zone; supply `utc_offset_minutes`.
+//! * Timestamps have no time zone; supply `time_zone` (an IANA name such as `Asia/Colombo`) or `utc_offset_minutes`.
 //! * Participants are display names, not phone numbers.
 //! * Day/month order is guessed from the data when `date_order` is `auto`.
 
@@ -21,12 +21,14 @@ use regex::Regex;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::error::{Error, Result};
 use crate::id::{derive_id, Ordinals};
 use crate::model::{
     Attachment, AttachmentKind, Call, CallOutcome, Channel, Direction, Event, ImportReport, Message,
     Participant,
 };
 use crate::phone::normalize_phone;
+use crate::tz::{Resolved, Zone};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -47,12 +49,17 @@ pub struct WhatsAppExportOptions {
     /// Default `auto`: inferred from the data, falling back to day-first with a warning.
     pub date_order: DateOrder,
     /// Offset of the phone's local time zone from UTC, in minutes
-    /// (e.g. `330` for UTC+05:30). Exports carry no time zone. Defaults to `0`.
+    /// (e.g. `330` for UTC+05:30). Exports carry no time zone. Defaults to `0`. Ignored when `time_zone` is set.
     pub utc_offset_minutes: i32,
     pub conversation_id: Option<String>,
     /// Calling code (digits, e.g. `"94"`) used to normalize sender names that
     /// are national phone numbers.
     pub default_country_code: Option<String>,
+    /// IANA time-zone name of the phone (exact spelling, e.g. `"Asia/Colombo"`). When set it replaces
+    /// `utc_offset_minutes` and follows the zone's daylight-saving rules; event ids do not depend on it. A
+    /// time in a repeated hour uses the first occurrence and a time in a skipped hour moves forward by the gap
+    /// (reported in one warning). The zone database is bundled with msgkit, so results are the same everywhere.
+    pub time_zone: Option<String>,
 }
 
 struct Header {
@@ -127,7 +134,24 @@ fn resolve_order(entries: &[Entry], requested: DateOrder, warnings: &mut Vec<Str
     }
 }
 
-fn parse_timestamp(h: &Header, order: DateOrder, offset: FixedOffset) -> Option<chrono::DateTime<Utc>> {
+/// How wall-clock times become UTC: a fixed offset, or an IANA zone with daylight saving.
+enum Clock {
+    Fixed(FixedOffset),
+    Zone(Zone),
+}
+
+impl Clock {
+    fn resolve(&self, naive: &NaiveDateTime) -> Option<Resolved> {
+        match self {
+            Clock::Fixed(offset) => {
+                offset.from_local_datetime(naive).single().map(|dt| Resolved::Exact(dt.with_timezone(&Utc)))
+            }
+            Clock::Zone(zone) => zone.resolve(naive),
+        }
+    }
+}
+
+fn parse_timestamp(h: &Header, order: DateOrder, clock: &Clock) -> Option<Resolved> {
     let (first, second, third) = split_date(&h.date)?;
     let (year, month, day) = if first.len() == 4 {
         (first.parse::<i32>().ok()?, second.parse::<u32>().ok()?, third.parse::<u32>().ok()?)
@@ -148,7 +172,7 @@ fn parse_timestamp(h: &Header, order: DateOrder, offset: FixedOffset) -> Option<
         NaiveDate::from_ymd_opt(year, month, day)?,
         NaiveTime::from_hms_opt(hour, minute, second)?,
     );
-    offset.from_local_datetime(&naive).single().map(|dt| dt.with_timezone(&Utc))
+    clock.resolve(&naive)
 }
 
 /// The time of a header as (hour, minute, second) on a 24-hour clock.
@@ -326,27 +350,59 @@ pub fn parse(text: &str, opts: &WhatsAppExportOptions) -> ImportReport {
         report.warnings.push(format!("invalid utc_offset_minutes {}; using UTC", opts.utc_offset_minutes));
         FixedOffset::east_opt(0).expect("zero offset is valid")
     });
-    build_events(entries, opts, order, offset, report)
+    let clock = match opts.time_zone.as_deref().map(Zone::lookup) {
+        Some(Some(zone)) => Clock::Zone(zone),
+        Some(None) => {
+            // `try_parse` refuses an unknown zone; this infallible entry point keeps going with the offset.
+            report.warnings.push("unknown or unsupported time_zone; using utc_offset_minutes".into());
+            Clock::Fixed(offset)
+        }
+        None => Clock::Fixed(offset),
+    };
+    build_events(entries, opts, order, &clock, report)
+}
+
+/// Like [`parse`], but refuses an unknown `time_zone` with [`Error::InvalidInput`] instead of falling back to
+/// `utc_offset_minutes` with a warning. The JSON entry point, the HTTP service and the command line use this.
+///
+/// # Errors
+/// [`Error::InvalidInput`] when `opts.time_zone` is not an exact IANA zone name of the bundled database.
+pub fn try_parse(text: &str, opts: &WhatsAppExportOptions) -> Result<ImportReport> {
+    if let Some(name) = &opts.time_zone {
+        if Zone::lookup(name).is_none() {
+            return Err(Error::InvalidInput(
+                "unknown or unsupported time_zone (use an exact IANA name such as Asia/Colombo)".into(),
+            ));
+        }
+    }
+    Ok(parse(text, opts))
 }
 
 fn build_events(
     entries: Vec<Entry>,
     opts: &WhatsAppExportOptions,
     order: DateOrder,
-    offset: FixedOffset,
+    clock: &Clock,
     mut report: ImportReport,
 ) -> ImportReport {
     let mut ordinals = Ordinals::default();
     let mut bad_dates = 0usize;
     let mut unrecognized = 0usize;
+    let (mut repeated, mut skipped) = (0usize, 0usize);
 
     for entry in entries {
-        let (Some(timestamp), Some(local)) =
-            (parse_timestamp(&entry.header, order, offset), local_key(&entry.header))
+        let (Some(resolved), Some(local)) =
+            (parse_timestamp(&entry.header, order, clock), local_key(&entry.header))
         else {
             bad_dates += 1;
             continue;
         };
+        match resolved {
+            Resolved::Exact(_) => {}
+            Resolved::Repeated(_) => repeated += 1,
+            Resolved::Skipped(_) => skipped += 1,
+        }
+        let timestamp = resolved.instant();
 
         let (name, body) = match entry.text.split_once(": ") {
             Some((n, b)) if !n.is_empty() && n.chars().count() <= 100 && !candidate_is_notice(n) => {
@@ -412,6 +468,14 @@ fn build_events(
         report
             .warnings
             .push(format!("{bad_dates} message(s) skipped because their date could not be parsed"));
+    }
+    if repeated + skipped > 0 {
+        report.warnings.push(format!(
+            "{} message time(s) fell where the time zone's UTC offset changes (daylight saving or a change of \
+             rules): {repeated} in a repeated period (read as the first occurrence) and {skipped} in a skipped \
+             period (moved forward by the gap)",
+            repeated + skipped
+        ));
     }
     if unrecognized > 0 {
         report.warnings.push(format!(

@@ -94,11 +94,8 @@ fn time_zone_results_do_not_depend_on_operating_system_files_or_the_tz_variable(
     fs::write(decoy.join("Asia/Colombo"), b"this is not a TZif file").unwrap();
 
     let chat = "01/06/2024, 12:00 - Alex: hello\n";
-    let opts = WhatsAppExportOptions {
-        date_order: DateOrder::Dmy,
-        time_zone: Some("Asia/Colombo".into()),
-        ..WhatsAppExportOptions::default()
-    };
+    let opts =
+        WhatsAppExportOptions::default().with_date_order(DateOrder::Dmy).with_time_zone("Asia/Colombo");
     let before = try_parse(chat, &opts).unwrap();
 
     std::env::set_var("TZDIR", &decoy);

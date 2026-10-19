@@ -27,12 +27,9 @@ fn ids(report: &ImportReport) -> Vec<String> {
 }
 
 fn options(order: DateOrder, offset: i32, country: Option<&str>) -> WhatsAppExportOptions {
-    WhatsAppExportOptions {
-        date_order: order,
-        utc_offset_minutes: offset,
-        default_country_code: country.map(str::to_owned),
-        ..WhatsAppExportOptions::default()
-    }
+    let mut opts = WhatsAppExportOptions::default().with_date_order(order).with_utc_offset_minutes(offset);
+    opts.default_country_code = country.map(str::to_owned);
+    opts
 }
 
 // ---- generators -----------------------------------------------------------------------------------------
@@ -129,7 +126,7 @@ proptest! {
 
     #[test]
     fn ids_ignore_the_time_zone(text in chat(), zone in time_zone()) {
-        let with_zone = WhatsAppExportOptions { time_zone: Some(zone.to_owned()), ..options(DateOrder::Dmy, 0, None) };
+        let with_zone = options(DateOrder::Dmy, 0, None).with_time_zone(zone);
         let (a, b) = (parse(&text, &options(DateOrder::Dmy, 0, None)), parse(&text, &with_zone));
         prop_assert_eq!(a.events.len(), b.events.len());
         prop_assert_eq!(ids(&a), ids(&b));
@@ -231,7 +228,9 @@ proptest! {
         let sms: Vec<Value> = rows.iter().map(|(ms, kind, addr, body, _)| json!({ "address": addr, "body": body, "date_ms": ms, "type": kind })).collect();
         let calls: Vec<Value> = rows.iter().map(|(ms, kind, num, _, secs)| json!({ "number": num, "date_ms": ms, "type": kind, "duration_secs": secs })).collect();
         let batch: DeviceBatch = serde_json::from_value(json!({ "sms": sms, "calls": calls })).unwrap();
-        let report = device::normalize(&batch, &DeviceOptions { default_country_code: country, ..DeviceOptions::default() });
+        let mut opts = DeviceOptions::default();
+        opts.default_country_code = country;
+        let report = device::normalize(&batch, &opts);
         for event in &report.events {
             let value = serde_json::to_value(event).unwrap();
             prop_assert!(value["timestamp"].as_str().unwrap().ends_with('Z'));

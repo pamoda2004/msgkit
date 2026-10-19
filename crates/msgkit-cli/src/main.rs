@@ -106,18 +106,18 @@ fn run(cli: Cli) -> Result<ImportReport, String> {
             default_country_code,
             time_zone,
         } => {
-            let opts = WhatsAppExportOptions {
-                self_name,
-                date_order: date_order.into(),
-                utc_offset_minutes,
-                conversation_id,
-                default_country_code,
-                time_zone,
-            };
+            let mut opts = WhatsAppExportOptions::default()
+                .with_date_order(date_order.into())
+                .with_utc_offset_minutes(utc_offset_minutes);
+            opts.self_name = self_name;
+            opts.conversation_id = conversation_id;
+            opts.default_country_code = default_country_code;
+            opts.time_zone = time_zone;
             whatsapp_export::try_parse(&read(&file)?, &opts).map_err(|e| e.to_string())
         }
         Command::FacebookExport { files, self_name } => {
-            let opts = FacebookExportOptions { self_name, ..Default::default() };
+            let mut opts = FacebookExportOptions::default();
+            opts.self_name = self_name;
             let mut merged = ImportReport::default();
             for f in files {
                 let r = facebook::parse(&read(&f)?, &opts).map_err(|e| format!("{}: {e}", f.display()))?;
@@ -130,7 +130,10 @@ fn run(cli: Cli) -> Result<ImportReport, String> {
         Command::Device { file, own_number, default_country_code } => {
             let batch: DeviceBatch =
                 serde_json::from_str(&read(&file)?).map_err(|e| format!("invalid device batch: {e}"))?;
-            Ok(device::normalize(&batch, &DeviceOptions { own_number, default_country_code }))
+            let mut opts = DeviceOptions::default();
+            opts.own_number = own_number;
+            opts.default_country_code = default_country_code;
+            Ok(device::normalize(&batch, &opts))
         }
         Command::Version => unreachable!("handled in main"),
     }

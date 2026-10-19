@@ -13,12 +13,9 @@ fn ids(report: &ImportReport) -> Vec<String> {
 }
 
 fn options(offset: i32, order: DateOrder, country: Option<&str>) -> WhatsAppExportOptions {
-    WhatsAppExportOptions {
-        utc_offset_minutes: offset,
-        date_order: order,
-        default_country_code: country.map(str::to_owned),
-        ..WhatsAppExportOptions::default()
-    }
+    let mut opts = WhatsAppExportOptions::default().with_utc_offset_minutes(offset).with_date_order(order);
+    opts.default_country_code = country.map(str::to_owned);
+    opts
 }
 
 const TWO_OKS: &str = "01/02/2024, 10:00 - Alex: ok\n01/02/2024, 10:00 - Alex: ok\n";
@@ -132,8 +129,8 @@ fn device_ids_ignore_the_default_country_code() {
     }))
     .unwrap();
     let with = |country: Option<&str>| {
-        let opts =
-            DeviceOptions { default_country_code: country.map(str::to_owned), ..DeviceOptions::default() };
+        let mut opts = DeviceOptions::default();
+        opts.default_country_code = country.map(str::to_owned);
         device::normalize(&batch, &opts)
     };
     let baseline = with(None);

@@ -77,6 +77,7 @@ export interface ImportReport {
 
 export type DateOrder = 'auto' | 'dmy' | 'mdy';
 
+/** Options for parsing a WhatsApp "Export chat" text file. */
 export interface WhatsAppExportOptions {
   /**
    * The exporting user's name as it appears in the chat. Used to decide message direction; without it
@@ -103,6 +104,7 @@ export interface WhatsAppExportOptions {
   time_zone?: string | null;
 }
 
+/** Options for parsing Messenger `message_N.json` files. */
 export interface FacebookExportOptions {
   /** The exporting user's name, used to decide message direction. */
   self_name?: string | null;
@@ -141,6 +143,7 @@ export interface DeviceBatch {
   calls?: RawCall[];
 }
 
+/** Options for normalizing Android SMS and call-log rows. */
 export interface DeviceOptions {
   /** The device owner's own number, recorded as the other party of each message. Optional. */
   own_number?: string | null;

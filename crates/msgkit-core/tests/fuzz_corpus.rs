@@ -35,19 +35,17 @@ fn whatsapp_export_corpus() {
             1 => DateOrder::Dmy,
             _ => DateOrder::Mdy,
         };
-        let opts = WhatsAppExportOptions {
-            utc_offset_minutes: i32::from(head[0]) * 10 - 1270,
-            date_order: order,
-            time_zone: [
-                None,
-                Some("Asia/Colombo"),
-                Some("America/New_York"),
-                Some("Australia/Lord_Howe"),
-                Some("Europe/London"),
-            ][usize::from(head[1] / 3) % 5]
-                .map(str::to_owned),
-            ..WhatsAppExportOptions::default()
-        };
+        let mut opts = WhatsAppExportOptions::default()
+            .with_utc_offset_minutes(i32::from(head[0]) * 10 - 1270)
+            .with_date_order(order);
+        opts.time_zone = [
+            None,
+            Some("Asia/Colombo"),
+            Some("America/New_York"),
+            Some("Australia/Lord_Howe"),
+            Some("Europe/London"),
+        ][usize::from(head[1] / 3) % 5]
+            .map(str::to_owned);
         let text = String::from_utf8_lossy(rest);
         assert_eq!(parse(&text, &opts), parse(&text, &opts), "{name}");
     }
@@ -68,7 +66,7 @@ fn facebook_export_corpus() {
 fn device_corpus() {
     for (name, data) in files("device") {
         let batch: DeviceBatch = serde_json::from_slice(&data).unwrap_or_else(|e| panic!("{name}: {e}"));
-        let opts = DeviceOptions { default_country_code: Some("94".to_owned()), ..DeviceOptions::default() };
+        let opts = DeviceOptions::default().with_default_country_code("94");
         let _ = device::normalize(&batch, &opts);
         let _ = device::normalize(&batch, &DeviceOptions::default());
     }

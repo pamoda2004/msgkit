@@ -38,7 +38,7 @@ def main() -> None:
         print("SIZE", line, flush=True)
         summary = os.environ.get("GITHUB_STEP_SUMMARY")
         if summary:
-            with open(summary, "a", encoding="utf-8") as f:
+            with Path(summary).open("a", encoding="utf-8") as f:
                 f.write(line + "\n")
 
         venv = tmp_path / "venv"

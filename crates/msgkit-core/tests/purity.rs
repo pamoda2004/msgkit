@@ -8,7 +8,6 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use msgkit_core::whatsapp_export::{try_parse, DateOrder, WhatsAppExportOptions};
-use serde_json::Value;
 
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -64,34 +63,27 @@ fn the_library_source_has_no_clock_file_environment_or_network_access() {
 
 #[test]
 fn only_the_bundled_time_zone_database_is_compiled_in() {
+    // `cargo tree` resolves only the packages this platform builds, so it needs nothing that has not been
+    // downloaded already (`cargo metadata` would fetch every optional dependency, which fails offline).
     let output = Command::new(env!("CARGO"))
-        .args(["metadata", "--format-version", "1", "--locked", "--offline"])
+        .args(["tree", "--workspace", "--invert", "jiff", "--prefix", "none", "--format", "{p}|{f}"])
+        .args(["--locked", "--offline"])
         .current_dir(root())
         .output()
-        .expect("cargo metadata");
+        .expect("cargo tree");
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
-    let metadata: Value = serde_json::from_slice(&output.stdout).unwrap();
-    let name_of = |id: &Value| {
-        metadata["packages"].as_array().unwrap().iter().find(|p| p["id"] == *id).unwrap()["name"].clone()
-    };
-    let mut seen = 0;
-    for node in metadata["resolve"]["nodes"].as_array().unwrap() {
-        if name_of(&node["id"]) != "jiff" {
-            continue;
-        }
-        seen += 1;
-        let mut features: Vec<&str> =
-            node["features"].as_array().unwrap().iter().filter_map(Value::as_str).collect();
-        features.sort_unstable();
-        // `tz-system` (OS API), `tzdb-zoneinfo` and `tzdb-concatenated` (OS files), `tzdb-bundle-platform` (OS
-        // dependent) and `js` must stay off, in every crate of the workspace.
-        assert_eq!(
-            features,
-            ["alloc", "std", "tzdb-bundle-always"],
-            "jiff must use only the bundled time-zone database"
-        );
-    }
-    assert_eq!(seen, 1, "expected exactly one jiff in the dependency graph");
+    let tree = String::from_utf8(output.stdout).unwrap();
+    let roots: Vec<&str> = tree.lines().filter(|l| l.starts_with("jiff v")).collect();
+    assert_eq!(
+        roots.len(),
+        1,
+        "expected exactly one jiff in the dependency graph:
+{tree}"
+    );
+    let features = roots[0].split('|').nth(1).unwrap();
+    // `tz-system` (OS API), `tzdb-zoneinfo` and `tzdb-concatenated` (OS files), `tzdb-bundle-platform` (OS
+    // dependent) and `js` must stay off, in every crate of the workspace.
+    assert_eq!(features, "alloc,std,tzdb-bundle-always", "jiff must use only the bundled time-zone database");
 }
 
 #[test]

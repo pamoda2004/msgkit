@@ -66,12 +66,12 @@ class MsgkitAndroidTest {
     fun deviceRowsAndInstantHelper() {
         val batch =
             DeviceBatch(
-                sms = listOf(RawSms(address = "0771234567", body = "Thanks!", dateMs = 1704067260000, kind = 2)),
-                calls = listOf(RawCall(number = "+94771234567", dateMs = 1704067400000, kind = 3)),
+                sms = listOf(RawSms(address = "0700000000", body = "Thanks!", dateMs = 1704067260000, kind = 2)),
+                calls = listOf(RawCall(number = "+94700000000", dateMs = 1704067400000, kind = 3)),
             )
         val r = Msgkit.normalizeDevice(batch, DeviceOptions(ownNumber = "+94710000000", defaultCountryCode = "94"))
         assertEquals(
-            "+94771234567",
+            "+94700000000",
             r.messages
                 .single()
                 .recipients

@@ -134,11 +134,11 @@ fn ios_format_with_invisible_marks_and_narrow_nbsp() {
 
 #[test]
 fn phone_number_senders_are_normalized() {
-    let text = "01/02/2024, 10:00 - +94 77 123 4567: hi\n";
+    let text = "01/02/2024, 10:00 - +94 70 000 0000: hi\n";
     let r = parse(text, &WhatsAppExportOptions::default());
     let m = messages(&r)[0];
-    assert_eq!(m.sender.id, "+94771234567");
-    assert_eq!(m.sender.display_name.as_deref(), Some("+94 77 123 4567"));
+    assert_eq!(m.sender.id, "+94700000000");
+    assert_eq!(m.sender.display_name.as_deref(), Some("+94 70 000 0000"));
 }
 
 #[test]

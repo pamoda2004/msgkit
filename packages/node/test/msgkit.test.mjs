@@ -78,7 +78,7 @@ test('device batch normalization', () => {
   const batch = JSON.parse(fixture('device_batch.json'));
   const r = msgkit.normalizeDevice(batch, { own_number: '+94710000000', default_country_code: '94' });
   assert.equal(messages(r).length, 3);
-  assert.equal(messages(r)[1].recipients[0].id, '+94771234567');
+  assert.equal(messages(r)[1].recipients[0].id, '+94700000000');
   assert.deepEqual(
     calls(r).map((c) => c.outcome),
     ['answered', 'missed', 'answered', 'rejected'],

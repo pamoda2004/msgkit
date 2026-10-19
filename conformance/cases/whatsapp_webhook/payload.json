@@ -9,11 +9,11 @@
           "value": {
             "messaging_product": "whatsapp",
             "metadata": { "display_phone_number": "15550100111", "phone_number_id": "123456" },
-            "contacts": [{ "profile": { "name": "Kamal" }, "wa_id": "94771234567" }],
+            "contacts": [{ "profile": { "name": "Kamal" }, "wa_id": "94700000000" }],
             "messages": [
-              { "from": "94771234567", "id": "wamid.AAA", "timestamp": "1704067200", "type": "text", "text": { "body": "Hello" } },
-              { "from": "94771234567", "id": "wamid.BBB", "timestamp": "1704067260", "type": "image", "image": { "id": "MEDIA1", "mime_type": "image/jpeg", "caption": "look" } },
-              { "from": "94771234567", "id": "wamid.CCC", "timestamp": "1704067320", "type": "reaction", "reaction": { "emoji": "x" } }
+              { "from": "94700000000", "id": "wamid.AAA", "timestamp": "1704067200", "type": "text", "text": { "body": "Hello" } },
+              { "from": "94700000000", "id": "wamid.BBB", "timestamp": "1704067260", "type": "image", "image": { "id": "MEDIA1", "mime_type": "image/jpeg", "caption": "look" } },
+              { "from": "94700000000", "id": "wamid.CCC", "timestamp": "1704067320", "type": "reaction", "reaction": { "emoji": "x" } }
             ]
           }
         },

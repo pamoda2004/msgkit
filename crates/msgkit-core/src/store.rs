@@ -128,7 +128,7 @@ pub mod conformance {
             conversation_id: Some("conv".into()),
             direction: Direction::Inbound,
             timestamp: DateTime::from_timestamp(secs, 0).unwrap(),
-            sender: Participant::with_name("+94771234567", "Kamal"),
+            sender: Participant::with_name("+94700000000", "Kamal"),
             recipients: vec![Participant::new("+15550100111")],
             body: Some(format!("body of {id} සිංහල 🎉")),
             attachments: vec![Attachment::new(AttachmentKind::Image)],

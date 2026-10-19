@@ -31,8 +31,8 @@ fn calls(r: &ImportReport) -> Vec<&Call> {
 fn an_outgoing_call_is_answered_only_when_it_has_a_duration() {
     let r = device::normalize(
         &batch(json!({ "calls": [
-            { "number": "0771234567", "date_ms": 1_000, "duration_secs": 0, "type": 2 },
-            { "number": "0771234567", "date_ms": 2_000, "duration_secs": 1, "type": 2 },
+            { "number": "0700000000", "date_ms": 1_000, "duration_secs": 0, "type": 2 },
+            { "number": "0700000000", "date_ms": 2_000, "duration_secs": 1, "type": 2 },
         ]})),
         &DeviceOptions::default(),
     );
@@ -47,7 +47,7 @@ fn an_outgoing_call_is_answered_only_when_it_has_a_duration() {
 #[test]
 fn a_call_with_an_invalid_timestamp_is_counted_in_the_warning() {
     let r = device::normalize(
-        &batch(json!({ "calls": [{ "number": "0771234567", "date_ms": i64::MAX, "type": 1 }] })),
+        &batch(json!({ "calls": [{ "number": "0700000000", "date_ms": i64::MAX, "type": 1 }] })),
         &DeviceOptions::default(),
     );
     assert_eq!(r.events, []);
@@ -84,14 +84,14 @@ fn events_are_sorted_by_time_and_ties_keep_source_order() {
 
 #[test]
 fn international_prefix_00_requires_digits_and_a_plausible_length() {
-    assert_eq!(normalize_phone("0094771234567", None).as_deref(), Some("+94771234567"));
+    assert_eq!(normalize_phone("0094700000000", None).as_deref(), Some("+94700000000"));
     assert_eq!(normalize_phone("0012345", None), None, "digits only but too short");
     assert_eq!(normalize_phone("00123456a89", None), None, "plausible length but not all digits");
 }
 
 #[test]
 fn national_numbers_with_a_country_code_require_digits_and_a_plausible_length() {
-    assert_eq!(normalize_phone("0771234567", Some("94")).as_deref(), Some("+94771234567"));
+    assert_eq!(normalize_phone("0700000000", Some("94")).as_deref(), Some("+94700000000"));
     assert_eq!(normalize_phone("0123", Some("94")), None, "digits only but too short");
     assert_eq!(normalize_phone("07712a4567", Some("94")), None, "plausible length but not all digits");
 }

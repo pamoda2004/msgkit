@@ -146,7 +146,7 @@ Not run: Miri/ASan/sanitizers on the unsafe code (no nightly toolchain installed
 | F14 | Webhook replay protection is only id de-duplication; after the 30-day prune, a replayed delivery is accepted again | [read] |
 | F07 | No check preventing real exports or personal data from being committed; repository is public | [read] |
 | F29 | Commit author email would be public | [ran] `git config` |
-| F22 | Fixture phone numbers (`+94771234567`, `0771234567`) look like plausible real numbers | [ran] repo scan: no real names or numbers from the project owner's data were found; the scan covered the participant names in the owner's private test chat, the owner's name, the Windows user name and local export paths (only two generic example path strings matched) |
+| F22 | Fixture phone numbers (a Sri Lankan mobile number in international and national form) looked like plausible real numbers. **Resolved (Phase 3):** every use in tests, fixtures, conformance cases, the fuzz corpus and docs now uses `+94700000000` / `0700000000` | [ran] repo scan: no real names or numbers from the project owner's data were found; the scan covered the participant names in the owner's private test chat, the owner's name, the Windows user name and local export paths (only two generic example path strings matched) |
 | – | Other logging: service logs only counts, booleans, addresses and storage error text; the CLI prints warnings that contain counts and platform ids, not text | [read] |
 
 ---

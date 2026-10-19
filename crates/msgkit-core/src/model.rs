@@ -59,7 +59,7 @@ pub enum CallOutcome {
 /// A person or address taking part in a conversation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Participant {
-    /// Stable identifier. An E.164 phone number (`+94771234567`) when one is
+    /// Stable identifier. An E.164 phone number (`+94700000000`) when one is
     /// known, otherwise the platform's own id or the display name.
     pub id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -122,7 +122,7 @@ pub struct Message {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub conversation_id: Option<String>,
     pub direction: Direction,
-    /// Always UTC.
+    /// ISO 8601, always UTC (for example `2024-01-01T00:00:00Z`).
     pub timestamp: DateTime<Utc>,
     pub sender: Participant,
     #[serde(default)]
@@ -131,7 +131,7 @@ pub struct Message {
     pub body: Option<String>,
     #[serde(default)]
     pub attachments: Vec<Attachment>,
-    /// The untouched source payload, kept so records can be re-parsed later.
+    /// The untouched source payload (webhook events only), kept so records can be re-parsed later.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub raw: Option<Value>,
 }
@@ -146,6 +146,7 @@ pub struct Call {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub conversation_id: Option<String>,
     pub direction: Direction,
+    /// ISO 8601, always UTC (for example `2024-01-01T00:00:00Z`).
     pub timestamp: DateTime<Utc>,
     /// Talk time in seconds; `0` for calls that were never answered.
     pub duration_secs: u64,
@@ -158,7 +159,7 @@ pub struct Call {
     pub raw: Option<Value>,
 }
 
-/// Anything msgkit can import.
+/// Anything msgkit can import: a message or a call.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Event {

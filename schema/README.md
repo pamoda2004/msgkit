@@ -14,7 +14,11 @@ Regenerate after an intentional model change (CI fails if they drift):
 UPDATE_SCHEMA=1 cargo test -p msgkit-core --test schema
 ```
 
-## Generating types for your language
+## Types in the msgkit packages
+
+The TypeScript (`packages/node/src/index.d.ts`), Python (`packages/python/src/msgkit/types.py`) and Kotlin (`Models.kt`) data types are **generated from these schemas** by `python scripts/generate_types.py` (Python standard library only). Never edit the code between the `<generated types ...>` markers by hand: change the Rust types, run `UPDATE_SCHEMA=1 cargo test -p msgkit-core --test schema`, then `python scripts/generate_types.py`. CI runs `python scripts/generate_types.py --check` and fails when a generated region and the schema disagree. The doc comments in the generated types come from the Rust doc comments.
+
+## Generating types for another language
 
 Any JSON Schema code generator works, for example:
 

@@ -115,7 +115,7 @@
     "properties": {
       "default_country_code": {
         "default": null,
-        "description": "Calling code (digits) for national numbers such as `0771234567`.",
+        "description": "Calling code (digits) for national numbers such as `0700000000`.",
         "type": [
           "string",
           "null"
@@ -186,7 +186,8 @@
       },
       "date_order": {
         "$ref": "#/$defs/DateOrder",
-        "default": "auto"
+        "default": "auto",
+        "description": "Default `auto`: inferred from the data, falling back to day-first with a warning."
       },
       "default_country_code": {
         "default": null,
@@ -206,7 +207,7 @@
       },
       "utc_offset_minutes": {
         "default": 0,
-        "description": "Offset of the phone's local time zone from UTC, in minutes\n(e.g. `330` for UTC+05:30). Defaults to `0`.",
+        "description": "Offset of the phone's local time zone from UTC, in minutes\n(e.g. `330` for UTC+05:30). Exports carry no time zone. Defaults to `0`.",
         "format": "int32",
         "type": "integer"
       }

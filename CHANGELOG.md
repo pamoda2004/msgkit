@@ -10,6 +10,7 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 
 ### Added (API and schema stability, Phase 3)
 - **Weekly mutation-testing workflow** (`.github/workflows/mutation.yml`, also runnable on demand): `cargo mutants` on `msgkit-core` with a pinned `cargo-mutants`, about 35 minutes. It is not a required check; it fails when a mutant survives and uploads the results as an artifact. The last full run caught all 216 viable mutants.
+- **Public API surface and stability levels** (`docs/API_SURFACE.md`): lists what the Rust crates, the C and WebAssembly ABIs, and the Python, Node.js, Kotlin, HTTP and command-line interfaces expose, marks each item stable or unstable, and states the compatibility rules for each level. Documentation only; no API changed. `docs/API.md` now lists `storage_error` among the error codes (it was missing).
 
 ### Added (testing depth, Phase 2)
 - **Conformance suite** (`conformance/`): 54 language-independent cases (input files plus the expected canonical JSON response) that the Rust core, the Python wheel, the Node.js WebAssembly package, the Kotlin/JNA package and the HTTP service must reproduce byte for byte; CI fails on any difference. Covers day/month ambiguity, 12/24-hour clocks, multi-line messages, media and system notices, deleted/edited messages, group chats, Facebook mojibake repair, emoji, Sinhala, Tamil and right-to-left text, very long messages, empty/truncated files, CRLF/LF/BOM variants, the id rules, signatures and error envelopes. See `conformance/README.md`.

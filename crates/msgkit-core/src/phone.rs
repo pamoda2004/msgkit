@@ -45,14 +45,14 @@ mod tests {
 
     #[test]
     fn international_formats() {
-        assert_eq!(normalize_phone("+94 77 123 4567", None).as_deref(), Some("+94771234567"));
-        assert_eq!(normalize_phone("0094-77-1234567", None).as_deref(), Some("+94771234567"));
+        assert_eq!(normalize_phone("+94 70 000 0000", None).as_deref(), Some("+94700000000"));
+        assert_eq!(normalize_phone("0094-70-0000000", None).as_deref(), Some("+94700000000"));
     }
 
     #[test]
     fn national_needs_country_code() {
-        assert_eq!(normalize_phone("0771234567", None), None);
-        assert_eq!(normalize_phone("0771234567", Some("94")).as_deref(), Some("+94771234567"));
+        assert_eq!(normalize_phone("0700000000", None), None);
+        assert_eq!(normalize_phone("0700000000", Some("94")).as_deref(), Some("+94700000000"));
     }
 
     #[test]

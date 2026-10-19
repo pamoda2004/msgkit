@@ -74,7 +74,7 @@ fn whatsapp_webhook_messages() {
     assert_eq!(msgs.len(), 3, "statuses are ignored, reaction is kept");
 
     assert_eq!(msgs[0].body.as_deref(), Some("Hello"));
-    assert_eq!(msgs[0].sender.id, "+94771234567");
+    assert_eq!(msgs[0].sender.id, "+94700000000");
     assert_eq!(msgs[0].sender.display_name.as_deref(), Some("Kamal"));
     assert_eq!(msgs[0].recipients[0].id, "+15550100111");
     assert_eq!(msgs[0].direction, Direction::Inbound);
@@ -128,12 +128,12 @@ fn device_sms_and_calls() {
     let msgs = messages(&r);
     assert_eq!(msgs.len(), 3);
     assert_eq!(msgs[0].direction, Direction::Inbound);
-    assert_eq!(msgs[0].sender.id, "+94771234567");
+    assert_eq!(msgs[0].sender.id, "+94700000000");
     assert_eq!(msgs[0].recipients[0].id, "+94710000000");
     assert_eq!(msgs[0].conversation_id.as_deref(), Some("5"));
     assert_eq!(msgs[1].direction, Direction::Outbound);
     assert_eq!(msgs[1].sender.id, "+94710000000");
-    assert_eq!(msgs[1].recipients[0].id, "+94771234567", "national number normalized");
+    assert_eq!(msgs[1].recipients[0].id, "+94700000000", "national number normalized");
     assert_eq!(msgs[2].sender.id, "DIALOG", "alphanumeric sender kept as is");
 
     let c = calls(&r);
@@ -191,7 +191,7 @@ fn dispatch_end_to_end() {
 
 #[test]
 fn whatsapp_webhook_maps_every_media_type_to_its_kind() {
-    let msg = |id: &str, kind: &str| serde_json::json!({ "from": "94771234567", "id": id, "timestamp": "1704067200", "type": kind, kind: { "id": "M" } });
+    let msg = |id: &str, kind: &str| serde_json::json!({ "from": "94700000000", "id": id, "timestamp": "1704067200", "type": kind, kind: { "id": "M" } });
     let payload = serde_json::json!({
         "object": "whatsapp_business_account",
         "entry": [{ "id": "W", "changes": [{ "field": "messages", "value": {

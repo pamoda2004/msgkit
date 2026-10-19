@@ -65,7 +65,7 @@ fn ids_do_not_change_with_utc_offset_minutes() {
 
 #[test]
 fn ids_do_not_change_with_default_country_code() {
-    let text = "01/02/2024, 10:00 - 0771234567: hello\n01/02/2024, 10:01 - +94 77 123 4567: hello\n";
+    let text = "01/02/2024, 10:00 - 0700000000: hello\n01/02/2024, 10:01 - +94 70 000 0000: hello\n";
     let baseline = ids(&parse(text, &options(0, DateOrder::Dmy, None)));
     for country in ["94", "+94", "1", "44"] {
         let report = parse(text, &options(0, DateOrder::Dmy, Some(country)));
@@ -125,10 +125,10 @@ fn missed_call_ids_ignore_the_offset_too() {
 fn device_ids_ignore_the_default_country_code() {
     let batch: DeviceBatch = serde_json::from_value(serde_json::json!({
         "sms": [{ "address": "+15550100111", "body": "hi", "date_ms": 1_700_000_000_000_i64, "type": 1 },
-                { "address": "0771234567", "body": "hi", "date_ms": 1_700_000_000_000_i64, "type": 1 },
-                { "address": "0771234567", "body": "hi", "date_ms": 1_700_000_000_000_i64, "type": 1 }],
+                { "address": "0700000000", "body": "hi", "date_ms": 1_700_000_000_000_i64, "type": 1 },
+                { "address": "0700000000", "body": "hi", "date_ms": 1_700_000_000_000_i64, "type": 1 }],
         "calls": [{ "number": "+15550100111", "date_ms": 1_700_000_100_000_i64, "type": 3 },
-                  { "number": "0771234567", "date_ms": 1_700_000_100_000_i64, "type": 3 }]
+                  { "number": "0700000000", "date_ms": 1_700_000_100_000_i64, "type": 3 }]
     }))
     .unwrap();
     let with = |country: Option<&str>| {

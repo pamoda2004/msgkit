@@ -107,30 +107,30 @@ class MsgkitTest {
                 sms =
                     listOf(
                         RawSms(
-                            address = "+94771234567",
+                            address = "+94700000000",
                             body = "Your code is 4821",
                             dateMs = 1704067200000,
                             kind = 1,
                             threadId = "5",
                         ),
-                        RawSms(address = "0771234567", body = "Thanks!", dateMs = 1704067260000, kind = 2),
+                        RawSms(address = "0700000000", body = "Thanks!", dateMs = 1704067260000, kind = 2),
                     ),
                 calls =
                     listOf(
                         RawCall(
-                            number = "+94771234567",
+                            number = "+94700000000",
                             dateMs = 1704067400000,
                             kind = 1,
                             durationSecs = 60,
                             name = "Kamal",
                         ),
-                        RawCall(number = "0771234567", dateMs = 1704067500000, kind = 3),
+                        RawCall(number = "0700000000", dateMs = 1704067500000, kind = 3),
                     ),
             )
         val r = Msgkit.normalizeDevice(batch, DeviceOptions(ownNumber = "+94710000000", defaultCountryCode = "94"))
         assertEquals(2, r.messages.size)
         assertEquals(
-            "+94771234567",
+            "+94700000000",
             r.messages[1]
                 .recipients
                 .single()

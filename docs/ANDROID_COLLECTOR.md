@@ -10,8 +10,8 @@ Field names mirror the Android column names ([`schema/options.schema.json`](../s
 
 ```json
 {
-  "sms":   [{"id":"11","address":"+94771234567","body":"...","date_ms":1704067200000,"type":1,"thread_id":"5"}],
-  "calls": [{"id":"1","number":"+94771234567","name":"Kamal","date_ms":1704067400000,"duration_secs":60,"type":1}]
+  "sms":   [{"id":"11","address":"+94700000000","body":"...","date_ms":1704067200000,"type":1,"thread_id":"5"}],
+  "calls": [{"id":"1","number":"+94700000000","name":"Kamal","date_ms":1704067400000,"duration_secs":60,"type":1}]
 }
 ```
 

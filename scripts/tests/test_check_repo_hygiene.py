@@ -91,7 +91,7 @@ class PersonalIdentifiers(unittest.TestCase):
         self.assertIn("phone-number", rules("a.md", "call 0768429137 now"))
 
     def test_obviously_synthetic_numbers_are_allowed(self) -> None:
-        for text in ["+94771234567", "0771234567", "+94710000000", "+12025550123", "+15555550100", "+11111111111"]:
+        for text in ["+94700000000", "0700000000", "+94710000000", "+12025550123", "+15555550100", "+11111111111"]:
             with self.subTest(text=text):
                 self.assertNotIn("phone-number", rules("a.md", text))
 

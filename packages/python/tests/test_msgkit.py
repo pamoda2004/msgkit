@@ -105,7 +105,7 @@ class OtherSourceTests(unittest.TestCase):
         batch = json.loads(fixture("device_batch.json"))
         r = msgkit.normalize_device(batch, own_number="+94710000000", default_country_code="94")
         self.assertEqual(len(messages(r)), 3)
-        self.assertEqual(messages(r)[1]["recipients"][0]["id"], "+94771234567")
+        self.assertEqual(messages(r)[1]["recipients"][0]["id"], "+94700000000")
         self.assertEqual([c["outcome"] for c in calls(r)], ["answered", "missed", "answered", "rejected"])
 
     def test_webhooks(self) -> None:

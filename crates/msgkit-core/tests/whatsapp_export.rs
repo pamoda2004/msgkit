@@ -84,7 +84,7 @@ fn missed_call_notice_becomes_a_call() {
 
 #[test]
 fn self_name_sets_direction() {
-    let opts = WhatsAppExportOptions { self_name: Some("alice".into()), ..Default::default() };
+    let opts = WhatsAppExportOptions::default().with_self_name("alice");
     let r = parse(ANDROID_DMY, &opts);
     for m in messages(&r) {
         let expected = if m.sender.id == "Alice" { Direction::Outbound } else { Direction::Inbound };
@@ -96,7 +96,7 @@ fn self_name_sets_direction() {
 
 #[test]
 fn utc_offset_is_applied() {
-    let opts = WhatsAppExportOptions { utc_offset_minutes: 330, ..Default::default() };
+    let opts = WhatsAppExportOptions::default().with_utc_offset_minutes(330);
     let r = parse(ANDROID_DMY, &opts);
     assert_eq!(ts(messages(&r)[0]), "2023-12-31T16:11:00Z");
 }
@@ -116,7 +116,7 @@ fn ambiguous_dates_warn_and_can_be_overridden() {
     assert!(auto.warnings.iter().any(|w| w.contains("ambiguous")));
     assert_eq!(ts(messages(&auto)[0]), "2024-04-03T10:00:00Z");
 
-    let mdy = parse(text, &WhatsAppExportOptions { date_order: DateOrder::Mdy, ..Default::default() });
+    let mdy = parse(text, &WhatsAppExportOptions::default().with_date_order(DateOrder::Mdy));
     assert_eq!(mdy.warnings, Vec::<String>::new());
     assert_eq!(ts(messages(&mdy)[0]), "2024-03-04T10:00:00Z");
 }
@@ -163,10 +163,7 @@ fn notices_with_a_colon_do_not_create_fake_participants() {
     let text = "01/02/2024, 10:00 - Alex changed the subject from \"Team: Alpha\" to \"Team: Beta\"\n\
                 01/02/2024, 10:01 - Alex created group \"Plans: 2024\"\n\
                 01/02/2024, 10:02 - Sam: hello: there\n";
-    let report = parse(
-        text,
-        &WhatsAppExportOptions { date_order: DateOrder::Dmy, ..WhatsAppExportOptions::default() },
-    );
+    let report = parse(text, &WhatsAppExportOptions::default().with_date_order(DateOrder::Dmy));
     let senders: Vec<_> = messages(&report).iter().map(|m| m.sender.id.clone()).collect();
     assert_eq!(senders, ["Sam"]);
     assert_eq!(report.warnings, Vec::<String>::new(), "known notices are not warnings");
@@ -175,10 +172,7 @@ fn notices_with_a_colon_do_not_create_fake_participants() {
 #[test]
 fn unknown_notices_are_counted_in_a_warning_without_quoting_them() {
     let text = "01/02/2024, 10:00 - Priya joined the secret club zxqmarker\n01/02/2024, 10:01 - Sam: hi\n";
-    let report = parse(
-        text,
-        &WhatsAppExportOptions { date_order: DateOrder::Dmy, ..WhatsAppExportOptions::default() },
-    );
+    let report = parse(text, &WhatsAppExportOptions::default().with_date_order(DateOrder::Dmy));
     assert_eq!(report.warnings.len(), 1);
     assert!(report.warnings[0].starts_with("1 line(s) without a sender were ignored"));
     assert!(!report.warnings[0].contains("zxqmarker"));

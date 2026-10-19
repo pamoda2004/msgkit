@@ -12,11 +12,7 @@ fn main() {
         .nth(1)
         .unwrap_or_else(|| concat!(env!("CARGO_MANIFEST_DIR"), "/../../../crates/msgkit-core/tests/fixtures/whatsapp_android_dmy.txt").into());
     let text = std::fs::read_to_string(&path).expect("cannot read the chat file");
-    let opts = WhatsAppExportOptions {
-        self_name: Some("Alice".into()),
-        utc_offset_minutes: 330,
-        ..Default::default()
-    };
+    let opts = WhatsAppExportOptions::default().with_self_name("Alice").with_utc_offset_minutes(330);
     let report = parse(&text, &opts);
 
     let mut per_sender: BTreeMap<String, usize> = BTreeMap::new();

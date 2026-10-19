@@ -184,6 +184,7 @@ public enum class DateOrder {
     MDY,
 }
 
+/** Options for parsing a WhatsApp "Export chat" text file. */
 @Serializable
 public data class WhatsAppExportOptions(
     /**
@@ -211,6 +212,7 @@ public data class WhatsAppExportOptions(
     @SerialName("time_zone") val timeZone: String? = null,
 )
 
+/** Options for parsing Messenger `message_N.json` files. */
 @Serializable
 public data class FacebookExportOptions(
     /** The exporting user's name, used to decide message direction. */
@@ -253,6 +255,7 @@ public data class DeviceBatch(
     val calls: List<RawCall> = emptyList(),
 )
 
+/** Options for normalizing Android SMS and call-log rows. */
 @Serializable
 public data class DeviceOptions(
     /** The device owner's own number, recorded as the other party of each message. Optional. */

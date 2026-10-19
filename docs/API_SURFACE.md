@@ -43,10 +43,10 @@ The `normalize_*_webhook` operations do not verify signatures; verify first.
 | `SCHEMA_VERSION` | Stable | |
 | `Error`, `Result`, `Error::code` | Stable | The codes are listed under [Error codes](#error-codes). The variants of `Error` may grow, so match with a wildcard arm. |
 | `api::dispatch`, `api::OPERATIONS` | Stable | The JSON entry point used by every other binding. |
-| `whatsapp_export::{parse, try_parse, WhatsAppExportOptions, DateOrder}` | Stable | `try_parse` refuses an unknown `time_zone`; `parse` warns and falls back to `utc_offset_minutes`. |
+| `whatsapp_export::{parse, try_parse, WhatsAppExportOptions, DateOrder}` | Stable | `try_parse` refuses an unknown `time_zone`; `parse` warns and falls back to `utc_offset_minutes`. `WhatsAppExportOptions` is `#[non_exhaustive]`: build it from `Default` with the `with_*` setters or by assigning fields; new options are not breaking changes. |
 | `tzdata_version()` | Stable | The bundled IANA time-zone database release, also reported by the `version` operation. |
-| `facebook::{parse, parse_value, FacebookExportOptions}` | Stable | |
-| `device::{normalize, DeviceBatch, DeviceOptions, RawSms, RawCall}` | Stable | |
+| `facebook::{parse, parse_value, FacebookExportOptions}` | Stable | `FacebookExportOptions` is `#[non_exhaustive]` (see above). |
+| `device::{normalize, DeviceBatch, DeviceOptions, RawSms, RawCall}` | Stable | `DeviceOptions` is `#[non_exhaustive]` (see above). |
 | `webhook::{normalize_whatsapp, normalize_messenger, verify_signature}` | Stable | |
 | `store::{EventStore, MemoryStore, write_ndjson}` | Stable | New methods added to `EventStore` will have default implementations. |
 | `webhook::sign` | Unstable | A helper for tests and tools; it is not an operation. |

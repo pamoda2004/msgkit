@@ -29,7 +29,7 @@ const FB: &str = include_str!("fixtures/facebook_thread.json");
 
 #[test]
 fn facebook_messages_are_sorted_oldest_first_and_repaired() {
-    let opts = FacebookExportOptions { self_name: Some("Alice Perera".into()), ..Default::default() };
+    let opts = FacebookExportOptions::default().with_self_name("Alice Perera");
     let r = facebook::parse(FB, &opts).unwrap();
     assert!(r.warnings.is_empty(), "{:?}", r.warnings);
     assert_eq!(r.events.len(), 5);
@@ -120,8 +120,7 @@ const DEVICE: &str = include_str!("fixtures/device_batch.json");
 #[test]
 fn device_sms_and_calls() {
     let batch: DeviceBatch = serde_json::from_str(DEVICE).unwrap();
-    let opts =
-        DeviceOptions { own_number: Some("+94710000000".into()), default_country_code: Some("94".into()) };
+    let opts = DeviceOptions::default().with_own_number("+94710000000").with_default_country_code("94");
     let r = device::normalize(&batch, &opts);
     assert_eq!(r.warnings, Vec::<String>::new());
 

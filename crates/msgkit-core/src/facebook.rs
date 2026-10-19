@@ -21,13 +21,42 @@ use crate::model::{
     Participant,
 };
 
+/// Options for [`parse`] and [`parse_value`].
+///
+/// `#[non_exhaustive]`, like [`WhatsAppExportOptions`](crate::whatsapp_export::WhatsAppExportOptions): start from
+/// [`Default`] and chain the `with_*` setters or assign fields.
+///
+/// ```
+/// use msgkit_core::facebook::FacebookExportOptions;
+///
+/// let opts = FacebookExportOptions::default().with_self_name("Alice Perera");
+/// assert_eq!(opts.self_name.as_deref(), Some("Alice Perera"));
+/// ```
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
+#[non_exhaustive]
+#[schemars(description = "Options for parsing Messenger `message_N.json` files.")]
 pub struct FacebookExportOptions {
     /// The exporting user's name, used to decide message direction.
     pub self_name: Option<String>,
     /// Overrides the conversation id (defaults to the export's `thread_path`).
     pub conversation_id: Option<String>,
+}
+
+impl FacebookExportOptions {
+    /// Sets [`self_name`](Self::self_name).
+    #[must_use]
+    pub fn with_self_name(mut self, name: impl Into<String>) -> Self {
+        self.self_name = Some(name.into());
+        self
+    }
+
+    /// Sets [`conversation_id`](Self::conversation_id).
+    #[must_use]
+    pub fn with_conversation_id(mut self, id: impl Into<String>) -> Self {
+        self.conversation_id = Some(id.into());
+        self
+    }
 }
 
 #[derive(Deserialize)]

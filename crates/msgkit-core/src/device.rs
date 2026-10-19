@@ -56,14 +56,43 @@ pub struct DeviceBatch {
     pub calls: Vec<RawCall>,
 }
 
+/// Options for [`normalize`].
+///
+/// `#[non_exhaustive]`, like [`WhatsAppExportOptions`](crate::whatsapp_export::WhatsAppExportOptions): start from
+/// [`Default`] and chain the `with_*` setters or assign fields.
+///
+/// ```
+/// use msgkit_core::device::DeviceOptions;
+///
+/// let opts = DeviceOptions::default().with_own_number("+94700000000").with_default_country_code("94");
+/// assert_eq!(opts.default_country_code.as_deref(), Some("94"));
+/// ```
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
+#[non_exhaustive]
+#[schemars(description = "Options for normalizing Android SMS and call-log rows.")]
 pub struct DeviceOptions {
     /// The device owner's own number, recorded as the other party of each
     /// message. Optional.
     pub own_number: Option<String>,
     /// Calling code (digits) for national numbers such as `0700000000`.
     pub default_country_code: Option<String>,
+}
+
+impl DeviceOptions {
+    /// Sets [`own_number`](Self::own_number).
+    #[must_use]
+    pub fn with_own_number(mut self, number: impl Into<String>) -> Self {
+        self.own_number = Some(number.into());
+        self
+    }
+
+    /// Sets [`default_country_code`](Self::default_country_code).
+    #[must_use]
+    pub fn with_default_country_code(mut self, code: impl Into<String>) -> Self {
+        self.default_country_code = Some(code.into());
+        self
+    }
 }
 
 pub fn normalize(batch: &DeviceBatch, opts: &DeviceOptions) -> ImportReport {

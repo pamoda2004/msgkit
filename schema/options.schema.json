@@ -112,6 +112,7 @@
   },
   "device_options": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "Options for normalizing Android SMS and call-log rows.",
     "properties": {
       "default_country_code": {
         "default": null,
@@ -135,6 +136,7 @@
   },
   "facebook_export": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "Options for parsing Messenger `message_N.json` files.",
     "properties": {
       "conversation_id": {
         "default": null,
@@ -176,6 +178,7 @@
       }
     },
     "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "Options for parsing a WhatsApp \"Export chat\" text file.",
     "properties": {
       "conversation_id": {
         "default": null,

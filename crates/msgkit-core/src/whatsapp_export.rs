@@ -40,8 +40,39 @@ pub enum DateOrder {
     Mdy,
 }
 
+/// Options for [`parse`] and [`try_parse`].
+///
+/// New options are added over time, so this struct is `#[non_exhaustive]`: outside this crate it cannot be built
+/// with a struct literal. Start from [`Default`] and either chain the `with_*` setters or assign fields:
+///
+/// ```
+/// use msgkit_core::whatsapp_export::{DateOrder, WhatsAppExportOptions};
+///
+/// let chained = WhatsAppExportOptions::default()
+///     .with_self_name("Alice")
+///     .with_date_order(DateOrder::Dmy)
+///     .with_time_zone("Asia/Colombo");
+///
+/// let mut assigned = WhatsAppExportOptions::default();
+/// assigned.self_name = Some("Alice".to_owned());
+/// assigned.date_order = DateOrder::Dmy;
+/// assigned.time_zone = Some("Asia/Colombo".to_owned());
+///
+/// assert_eq!(chained.time_zone, assigned.time_zone);
+/// ```
+///
+/// A struct literal is rejected (`E0639`), so adding an option is never a breaking change:
+///
+/// ```compile_fail,E0639
+/// use msgkit_core::whatsapp_export::WhatsAppExportOptions;
+///
+/// let _ = WhatsAppExportOptions { utc_offset_minutes: 330, ..Default::default() };
+/// ```
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
+#[non_exhaustive]
+// The schema gets a language-neutral description; the Rust documentation above is about Rust.
+#[schemars(description = "Options for parsing a WhatsApp \"Export chat\" text file.")]
 pub struct WhatsAppExportOptions {
     /// The exporting user's name as it appears in the chat. Used to decide
     /// message direction; without it direction is `unknown`.
@@ -131,6 +162,50 @@ fn resolve_order(entries: &[Entry], requested: DateOrder, warnings: &mut Vec<Str
             );
             DateOrder::Dmy
         }
+    }
+}
+
+impl WhatsAppExportOptions {
+    /// Sets [`self_name`](Self::self_name).
+    #[must_use]
+    pub fn with_self_name(mut self, name: impl Into<String>) -> Self {
+        self.self_name = Some(name.into());
+        self
+    }
+
+    /// Sets [`date_order`](Self::date_order).
+    #[must_use]
+    pub fn with_date_order(mut self, order: DateOrder) -> Self {
+        self.date_order = order;
+        self
+    }
+
+    /// Sets [`utc_offset_minutes`](Self::utc_offset_minutes).
+    #[must_use]
+    pub fn with_utc_offset_minutes(mut self, minutes: i32) -> Self {
+        self.utc_offset_minutes = minutes;
+        self
+    }
+
+    /// Sets [`conversation_id`](Self::conversation_id).
+    #[must_use]
+    pub fn with_conversation_id(mut self, id: impl Into<String>) -> Self {
+        self.conversation_id = Some(id.into());
+        self
+    }
+
+    /// Sets [`default_country_code`](Self::default_country_code).
+    #[must_use]
+    pub fn with_default_country_code(mut self, code: impl Into<String>) -> Self {
+        self.default_country_code = Some(code.into());
+        self
+    }
+
+    /// Sets [`time_zone`](Self::time_zone).
+    #[must_use]
+    pub fn with_time_zone(mut self, zone: impl Into<String>) -> Self {
+        self.time_zone = Some(zone.into());
+        self
     }
 }
 

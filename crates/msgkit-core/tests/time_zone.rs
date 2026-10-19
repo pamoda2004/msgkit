@@ -9,12 +9,10 @@ const CHAT: &str =
     "01/06/2024, 12:00 - Alex: hello\n01/06/2024, 12:05 - Sam: hi\n01/06/2024, 12:05 - Sam: hi\n";
 
 fn options(zone: Option<&str>, offset: i32) -> WhatsAppExportOptions {
-    WhatsAppExportOptions {
-        date_order: DateOrder::Dmy,
-        utc_offset_minutes: offset,
-        time_zone: zone.map(str::to_owned),
-        ..WhatsAppExportOptions::default()
-    }
+    let mut opts =
+        WhatsAppExportOptions::default().with_date_order(DateOrder::Dmy).with_utc_offset_minutes(offset);
+    opts.time_zone = zone.map(str::to_owned);
+    opts
 }
 
 fn ids(chat: &str, opts: &WhatsAppExportOptions) -> Vec<String> {
@@ -41,7 +39,7 @@ fn ids_do_not_depend_on_the_time_zone() {
 
 #[test]
 fn without_a_time_zone_nothing_changes() {
-    let default = WhatsAppExportOptions { date_order: DateOrder::Dmy, ..WhatsAppExportOptions::default() };
+    let default = WhatsAppExportOptions::default().with_date_order(DateOrder::Dmy);
     assert_eq!(try_parse(CHAT, &default).unwrap(), parse(CHAT, &default));
     assert_eq!(
         instants(CHAT, &options(None, 330)),

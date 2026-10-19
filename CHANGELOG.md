@@ -45,6 +45,15 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 
 ### Breaking (Rust API only, Phase 3)
 - **`WhatsAppExportOptions` has a new public field, `time_zone`** (see "IANA time zones" above). The struct has only public fields, so Rust code that builds it by listing every field, without `..Default::default()`, no longer compiles until it adds `time_zone: None`. `cargo-semver-checks` reports it as `constructible_struct_adds_field`. **Not affected:** the JSON option (an absent `time_zone` is the same as before), the Python, Node.js, Kotlin, HTTP, command-line and C/WebAssembly interfaces, and Rust code that already uses `..Default::default()`.
+- **`WhatsAppExportOptions`, `FacebookExportOptions` and `DeviceOptions` are now `#[non_exhaustive]`**, so options added in later versions are no longer breaking changes. Outside `msgkit-core` they cannot be built with a struct literal (not even with `..Default::default()`; error `E0639`). Start from `Default` and chain the new `with_*` setters, or assign fields:
+  ```rust
+  let opts = WhatsAppExportOptions::default()
+      .with_self_name("Alice")
+      .with_date_order(DateOrder::Dmy)
+      .with_time_zone("Asia/Colombo");
+  // or: let mut opts = WhatsAppExportOptions::default(); opts.utc_offset_minutes = 330;
+  ```
+  The setters are `with_self_name`, `with_date_order`, `with_utc_offset_minutes`, `with_conversation_id`, `with_default_country_code` and `with_time_zone` (WhatsApp); `with_self_name` and `with_conversation_id` (Facebook); `with_own_number` and `with_default_country_code` (device). Reading fields and JSON (de)serialization are unchanged, and no binding is affected: Python, Node.js, Kotlin, HTTP, the command line and the C/WebAssembly interfaces use JSON. Doc tests show both styles and check that a struct literal is rejected. The schema gains a one-line description for each of the three options objects (documentation only).
 - **Every package moves from 0.1.0 to 0.2.0** (`msgkit-core` and the other crates, the Python wheel, the npm package, the Maven artifacts, `openapi.yaml`), the 0.x convention for a breaking change. Nothing had been published, so no released version is affected, and the semver gate is unchanged (it now compares 0.2.0 with the prototype baseline and passes).
 
 ### Added (error taxonomy, Phase 3)

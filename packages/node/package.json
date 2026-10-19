@@ -1,6 +1,6 @@
 {
   "name": "@pamoda2004/msgkit",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Import SMS, WhatsApp and Messenger messages and calls into one normalized model. Portable WebAssembly build; no native addons.",
   "keywords": [
     "sms",

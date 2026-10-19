@@ -14,7 +14,7 @@ repositories {
 }
 
 dependencies {
-    implementation("io.github.pamoda2004:msgkit:0.1.0")
+    implementation("io.github.pamoda2004:msgkit:0.2.0")
 }
 
 application {

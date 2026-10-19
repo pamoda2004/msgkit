@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.88"
 license = "MIT"
@@ -17,8 +17,8 @@ categories = ["parser-implementations", "api-bindings"]
 # Internal crates are declared once here (with a version, which crates.io requires to publish them).
 # Bump these together with [workspace.package] version.
 [workspace.dependencies]
-msgkit-core = { path = "crates/msgkit-core", version = "0.1.0" }
-msgkit-store-sqlite = { path = "crates/msgkit-store-sqlite", version = "0.1.0" }
+msgkit-core = { path = "crates/msgkit-core", version = "0.2.0" }
+msgkit-store-sqlite = { path = "crates/msgkit-store-sqlite", version = "0.2.0" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

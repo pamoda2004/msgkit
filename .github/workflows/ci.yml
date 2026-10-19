@@ -261,6 +261,14 @@ jobs:
         working-directory: packages/node
       - run: npm pack --dry-run
         working-directory: packages/node
+      # Package size, for the job summary (compare before and after dependency changes).
+      - name: Package size
+        if: matrix.node == 22
+        shell: bash
+        working-directory: packages/node
+        run: |
+          npm pack --dry-run --json > pack.json
+          node -e "const p=require('./pack.json')[0]; const w=p.files.find(f=>f.path.endsWith('.wasm')); const line='npm package: tarball '+p.size+' bytes, wasm '+w.size+' bytes, unpacked '+p.unpackedSize+' bytes'; console.log('SIZE '+line); require('fs').appendFileSync(process.env.GITHUB_STEP_SUMMARY, line+String.fromCharCode(10))"
 
   kotlin-jvm:
     name: Kotlin JVM (JDK ${{ matrix.java }}, ${{ matrix.os }})
@@ -317,6 +325,17 @@ jobs:
       - run: python3 packages/kotlin/scripts/build_android_libs.py
       - run: ./gradlew :msgkit-android:ktlintCheck :msgkit-android:assembleRelease --console=plain
         working-directory: packages/kotlin
+      - name: Library size
+        shell: bash
+        run: |
+          for f in packages/kotlin/msgkit-android/build/outputs/aar/*-release.aar; do
+            line="android aar: $(basename "$f") $(stat -c %s "$f") bytes"
+            echo "SIZE $line"; echo "$line" >> "$GITHUB_STEP_SUMMARY"
+          done
+          for f in packages/kotlin/msgkit-android/src/main/jniLibs/*/libmsgkit_ffi.so; do
+            line="android lib: $(basename "$(dirname "$f")") $(stat -c %s "$f") bytes"
+            echo "SIZE $line"; echo "$line" >> "$GITHUB_STEP_SUMMARY"
+          done
       - name: Instrumented tests on an emulator
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:

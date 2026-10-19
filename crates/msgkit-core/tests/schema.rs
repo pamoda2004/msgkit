@@ -8,17 +8,25 @@ use std::path::PathBuf;
 use msgkit_core::device::{DeviceBatch, DeviceOptions};
 use msgkit_core::facebook::FacebookExportOptions;
 use msgkit_core::whatsapp_export::WhatsAppExportOptions;
-use msgkit_core::{Event, ImportReport};
+use msgkit_core::{Event, ImportReport, SCHEMA_VERSION};
 use schemars::schema_for;
 use serde_json::json;
+
+const VERSION_KEY: &str = "x-msgkit-schema-version";
 
 fn schema_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../schema")
 }
 
+/// Every schema file declares the `SCHEMA_VERSION` it was generated for (`docs/SCHEMA_POLICY.md`).
+fn with_version(mut schema: serde_json::Value) -> serde_json::Value {
+    schema[VERSION_KEY] = json!(SCHEMA_VERSION);
+    schema
+}
+
 fn check(file: &str, schema: &serde_json::Value) {
     let path = schema_dir().join(file);
-    let generated = format!("{}\n", serde_json::to_string_pretty(schema).unwrap());
+    let generated = format!("{}\n", serde_json::to_string_pretty(&with_version(schema.clone())).unwrap());
 
     if std::env::var_os("UPDATE_SCHEMA").is_some() {
         std::fs::write(&path, generated).unwrap();

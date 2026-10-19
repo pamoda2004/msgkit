@@ -15,8 +15,12 @@ Rules (``output`` schemas describe data msgkit produces, ``input`` schemas descr
 * input: a new required property, or an optional property becoming required, is **breaking**;
 * adding an optional property, a definition, an enum value or a ``oneOf`` variant is **additive**.
 
-Breaking changes are accepted only when ``SCHEMA_VERSION`` in ``crates/msgkit-core/src/lib.rs`` has a
-higher major version than the base.
+Version rules (docs/SCHEMA_POLICY.md), checked against ``SCHEMA_VERSION`` in ``crates/msgkit-core/src/lib.rs``:
+
+* breaking changes are accepted only with a higher major version than the base;
+* additive changes need at least a higher minor version than the base;
+* the version never goes backwards;
+* each schema file's ``x-msgkit-schema-version`` marker equals ``SCHEMA_VERSION``.
 """
 
 from __future__ import annotations
@@ -93,7 +97,8 @@ def collect(doc: Json) -> dict[str, Json]:
         return definitions(doc)
     result: dict[str, Json] = {}
     for key, sub in doc.items():
-        result.update(definitions(sub, prefix=f"{key}/"))
+        if isinstance(sub, dict):  # skips metadata such as the "x-msgkit-schema-version" marker
+            result.update(definitions(sub, prefix=f"{key}/"))
     return result
 
 
@@ -138,7 +143,31 @@ def compare(old_doc: Json, new_doc: Json, direction: str) -> list[Finding]:
     return sorted(findings)
 
 
-def parse_version(text: str) -> tuple[int, int, int] | None:
+VERSION_KEY = "x-msgkit-schema-version"
+Version = tuple[int, int, int]
+
+
+def marker_version(doc: Json) -> str | None:
+    """The version a schema file declares about itself, if any."""
+    value = doc.get(VERSION_KEY)
+    return value if isinstance(value, str) else None
+
+
+def version_problems(old_v: Version | None, new_v: Version | None, breaking: bool, additive: bool) -> list[str]:
+    """Rules relating schema changes to ``SCHEMA_VERSION`` (docs/SCHEMA_POLICY.md)."""
+    if old_v is None or new_v is None:
+        return []
+    problems = []
+    if new_v < old_v:
+        problems.append(f"SCHEMA_VERSION went backwards: {old_v} -> {new_v}.")
+    if breaking and new_v[0] <= old_v[0]:
+        problems.append("Breaking schema changes require a major SCHEMA_VERSION bump.")
+    if additive and not breaking and new_v[:2] <= old_v[:2]:
+        problems.append("Additive schema changes require at least a minor SCHEMA_VERSION bump.")
+    return problems
+
+
+def parse_version(text: str) -> Version | None:
     m = VERSION_RE.search(text)
     return (int(m.group(1)), int(m.group(2)), int(m.group(3))) if m else None
 
@@ -166,18 +195,26 @@ def check_against_ref(root: Path, ref: str, schema_dir: str) -> int:
         print(f"additive  {f}: {m}")
     for f, m in breaking:
         print(f"BREAKING  {f}: {m}")
-    if not breaking:
-        print(f"Schema compatibility OK against {ref} ({len(additive)} additive change(s)).")
-        return 0
 
     lib = "crates/msgkit-core/src/lib.rs"
     old_v = parse_version(git_show(root, ref, lib) or "")
     new_v = parse_version((root / lib).read_text(encoding="utf-8"))
-    if old_v and new_v and new_v[0] > old_v[0]:
-        print(f"Breaking changes accepted: SCHEMA_VERSION major {old_v[0]} -> {new_v[0]}.")
-        return 0
-    print("Breaking schema changes require a major SCHEMA_VERSION bump (see docs/SCHEMA_POLICY.md).")
-    return 1
+    problems = version_problems(old_v, new_v, bool(breaking), bool(additive))
+    if new_v is not None:
+        declared = ".".join(map(str, new_v))
+        for path in sorted((root / schema_dir).glob("*.schema.json")):
+            marker = marker_version(json.loads(path.read_text(encoding="utf-8")))
+            if marker is not None and marker != declared:
+                problems.append(f"{path.name} declares schema version {marker} but SCHEMA_VERSION is {declared}.")
+    for problem in problems:
+        print(f"{problem} (see docs/SCHEMA_POLICY.md)")
+    if problems:
+        return 1
+    if breaking:
+        print(f"Breaking changes accepted: SCHEMA_VERSION {old_v} -> {new_v}.")
+    else:
+        print(f"Schema compatibility OK against {ref} ({len(additive)} additive change(s)).")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:

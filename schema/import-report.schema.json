@@ -299,5 +299,6 @@
     "warnings"
   ],
   "title": "ImportReport",
-  "type": "object"
+  "type": "object",
+  "x-msgkit-schema-version": "1.0.0"
 }

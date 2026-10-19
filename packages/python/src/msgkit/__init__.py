@@ -21,7 +21,7 @@ from ._native import dispatch, native_version
 from .errors import MsgkitError
 from .types import DateOrder, DeviceBatch, ImportReport, VersionInfo
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "MsgkitError",

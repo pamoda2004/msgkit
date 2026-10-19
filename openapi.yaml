@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: msgkit service
-  version: 0.1.0
+  version: 0.2.0
   description: >
     HTTP sidecar for msgkit. Import endpoints convert user exports and device
     rows into normalized events; webhook endpoints receive signed deliveries

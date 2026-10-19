@@ -40,7 +40,7 @@ cd packages\node
 node scripts\build.mjs
 npm pack --pack-destination ..\..\examples\consumers\node
 cd ..\..\examples\consumers\node
-npm install --no-save pamoda2004-msgkit-0.1.0.tgz
+npm install --no-save pamoda2004-msgkit-0.2.0.tgz
 node app.mjs
 ```
 
@@ -73,11 +73,11 @@ cd ..\..\examples\consumers\kotlin
 gradlew.bat run
 ```
 
-`io.github.pamoda2004:msgkit:0.1.0` is now in `~/.m2`. The consumer's `build.gradle.kts` is the whole integration:
+`io.github.pamoda2004:msgkit:0.2.0` is now in `~/.m2`. The consumer's `build.gradle.kts` is the whole integration:
 
 ```kotlin
 repositories { mavenLocal(); mavenCentral() }
-dependencies { implementation("io.github.pamoda2004:msgkit:0.1.0") }
+dependencies { implementation("io.github.pamoda2004:msgkit:0.2.0") }
 ```
 
 ## Any other language

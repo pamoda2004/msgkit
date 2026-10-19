@@ -11,7 +11,7 @@ This page lists what each binding exposes and how far you can rely on it. [API.m
 
 Notes that apply everywhere:
 
-* **Nothing has been published yet** and every package is at `0.1.0`. Until `1.0.0`, "stable" states the intent: a change to a stable item is still listed in the CHANGELOG as breaking and needs the owner's approval, but SemVer does not yet forbid it.
+* **Nothing has been published yet** and every package is at `0.2.0`. Until `1.0.0`, "stable" states the intent: a change to a stable item is still listed in the CHANGELOG as breaking and needs the owner's approval, but SemVer does not yet forbid it.
 * **Readers must be tolerant.** Ignore unknown JSON fields, and treat an unknown enum value or error `code` as "other". New enum values and error codes are additive and arrive in minor versions.
 * **Text meant for people is unstable**: error `message` values and `warnings` strings may be reworded in any release. Branch on the error `code` and the structured fields, never on the wording. (Error and warning text never repeats message content.)
 * **The data contract** is [`schema/`](../schema/README.md): the shapes of `Event`, `ImportReport` and the option objects are stable at the level of `SCHEMA_VERSION` (`1.0.0`). Exception: the contents of an event's `raw` field are the provider's own payload and are unstable.

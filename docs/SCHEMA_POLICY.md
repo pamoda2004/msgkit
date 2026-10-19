@@ -68,4 +68,4 @@ A breaking schema change needs the project owner's explicit approval before it i
 
 ## Before 1.0 of the packages
 
-The schema already follows these rules from `1.0.0`. The packages are still at `0.1.0` and nothing has been published, so no released consumer exists yet; the rules matter from the first publication on, and the project applies them from now so that the first release does not have to.
+The schema already follows these rules from `1.0.0`. The packages are still at `0.2.0` and nothing has been published, so no released consumer exists yet; the rules matter from the first publication on, and the project applies them from now so that the first release does not have to.

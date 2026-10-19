@@ -1,6 +1,6 @@
 name: Release
 
-# Push a tag like v0.1.0 (it must equal the version in Cargo.toml) to build and
+# Push a tag like v0.2.0 (it must equal the version in Cargo.toml) to build and
 # publish every package. Nothing is published until the publish-* jobs run, and
 # those need the `pypi` / `npm` environments (with trusted publishing / an
 # NPM_TOKEN secret) to be configured in the repository settings.

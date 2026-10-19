@@ -124,14 +124,4 @@ The `internal_error` envelope is produced only at this native boundary: by the l
 
 ## Error codes
 
-Every binding reports the same `code` for the same situation. The set is stable and grows only by addition; callers must tolerate codes they do not know.
-
-| Code | Where it comes from |
-|---|---|
-| `invalid_input` | The request could not be used: wrong JSON shape, missing field, bad option value. |
-| `parse_error` | Well-formed input that is not a supported format. |
-| `unknown_op` | The operation name is not one of `version().operations`. |
-| `storage_error` | A store backend failed (`Error::Storage`, returned by `EventStore` implementations such as `SqliteStore`). The import operations do not return it. |
-| `internal_error` | A panic or an unusable result at the native boundary (see above). |
-
-A fuller taxonomy, with a conformance case per code, is planned for the next Phase 3 step.
+Every binding reports the same `code` for the same situation, and the HTTP service adds a `code` field to its error bodies. The set is stable and grows only by addition; callers must tolerate codes they do not know. The full list, with the meaning of each code, where it is returned and where it is tested, is in [ERRORS.md](ERRORS.md).

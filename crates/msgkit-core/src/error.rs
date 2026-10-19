@@ -24,12 +24,53 @@ impl Error {
     #[must_use]
     pub fn code(&self) -> &'static str {
         match self {
-            Error::InvalidInput(_) => "invalid_input",
-            Error::Parse(_) => "parse_error",
-            Error::UnknownOp(_) => "unknown_op",
-            Error::Storage(_) => "storage_error",
+            Error::InvalidInput(_) => codes::INVALID_INPUT,
+            Error::Parse(_) => codes::PARSE_ERROR,
+            Error::UnknownOp(_) => codes::UNKNOWN_OP,
+            Error::Storage(_) => codes::STORAGE_ERROR,
         }
     }
+}
+
+/// The stable error codes, shared by every binding and by the HTTP service (see `docs/ERRORS.md`).
+///
+/// The set only grows: a code is never renamed or reused for a different situation, and callers should treat a
+/// code they do not know as a generic failure.
+pub mod codes {
+    /// The request could not be used: wrong JSON shape, missing field, bad option value, unusable query.
+    pub const INVALID_INPUT: &str = "invalid_input";
+    /// Well-formed input that is not a supported export or webhook.
+    pub const PARSE_ERROR: &str = "parse_error";
+    /// The operation name is not one of the supported operations.
+    pub const UNKNOWN_OP: &str = "unknown_op";
+    /// A store backend failed (disk full, corrupt database, ...).
+    pub const STORAGE_ERROR: &str = "storage_error";
+    /// An unexpected failure inside msgkit or at the native boundary (a caught panic, no usable result).
+    pub const INTERNAL_ERROR: &str = "internal_error";
+    /// HTTP: the request body is larger than the service accepts.
+    pub const LIMIT_EXCEEDED: &str = "limit_exceeded";
+    /// HTTP: the bearer token is missing or wrong.
+    pub const UNAUTHORIZED: &str = "unauthorized";
+    /// HTTP: a webhook delivery whose signature does not match.
+    pub const SIGNATURE_INVALID: &str = "signature_invalid";
+    /// HTTP: the webhook subscription handshake failed.
+    pub const VERIFICATION_FAILED: &str = "verification_failed";
+    /// HTTP: the webhook is not configured on this service.
+    pub const NOT_CONFIGURED: &str = "not_configured";
+
+    /// Every code, in documentation order.
+    pub const ALL: &[&str] = &[
+        INVALID_INPUT,
+        PARSE_ERROR,
+        UNKNOWN_OP,
+        STORAGE_ERROR,
+        INTERNAL_ERROR,
+        LIMIT_EXCEEDED,
+        UNAUTHORIZED,
+        SIGNATURE_INVALID,
+        VERIFICATION_FAILED,
+        NOT_CONFIGURED,
+    ];
 }
 
 /// Describes a JSON error without repeating any of the input.

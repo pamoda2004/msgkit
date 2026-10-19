@@ -27,6 +27,7 @@ Every change must pass the same gates locally and in CI (`.github/workflows/ci.y
 | Node.js | in `packages/node`: `npm ci` · `npm run lint` · `npm run typecheck` · `npm test` · `npm audit` |
 | Kotlin | in `packages/kotlin`: `./gradlew ktlintCheck detekt :msgkit:test` (`./gradlew ktlintFormat` fixes style) |
 | Fuzzing (nightly, Linux/macOS) | `cargo install cargo-fuzz` then `cargo fuzz run whatsapp_export -- -max_total_time=60` (targets: `cargo fuzz list`); the seed corpus in `fuzz/corpus` is also replayed on stable by `cargo test -p msgkit-core --test fuzz_corpus` |
+| Error codes | add a code only in `msgkit_core::error::codes`, `docs/ERRORS.md` and `openapi.yaml` together (`cargo test -p msgkit-core --test error_taxonomy` checks they agree); never change what an existing input returns |
 | Generated types | after changing the Rust data types: `UPDATE_SCHEMA=1 cargo test -p msgkit-core --test schema` then `python scripts/generate_types.py` (`--check` is what CI runs) |
 | Mutation testing | `cargo mutants -p msgkit-core` (about 35 minutes; review surviving mutants). Also runs weekly and on demand as the "Mutation testing" workflow, which is not a required check |
 

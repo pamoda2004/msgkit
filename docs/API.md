@@ -11,7 +11,7 @@ Every operation takes a JSON object and returns an envelope:
 {"ok": false, "error": {"code": "invalid_input", "message": "..."}}
 ```
 
-Error codes: `invalid_input`, `parse_error`, `unknown_op`, `storage_error`, `internal_error` (described in [API_SURFACE.md](API_SURFACE.md#error-codes)). Which parts of each binding are stable and which are not is listed in [API_SURFACE.md](API_SURFACE.md).
+Every error has a stable `code`; the full list, with the meaning of each code, where it is returned and how it is tested, is in [ERRORS.md](ERRORS.md). The HTTP service reports it as `{"error": "<text>", "code": "<code>"}`. Which parts of each binding are stable and which are not is listed in [API_SURFACE.md](API_SURFACE.md).
 
 Import operations return `data = {"events": [Event...], "warnings": [string...]}`. The `Event` shape is defined by [`schema/event.schema.json`](../schema/event.schema.json).
 

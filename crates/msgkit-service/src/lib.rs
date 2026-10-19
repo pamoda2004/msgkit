@@ -27,6 +27,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use msgkit_core::device::{self, DeviceBatch, DeviceOptions};
+use msgkit_core::error::codes;
 use msgkit_core::facebook::{self, FacebookExportOptions};
 use msgkit_core::store::{EventStore, MemoryStore};
 use msgkit_core::whatsapp_export::{self, WhatsAppExportOptions};
@@ -140,7 +141,7 @@ impl AppState {
         result.map_err(|e| {
             // Details stay in the log; clients get a generic message.
             tracing::error!("storage failure: {e}");
-            ApiError(StatusCode::INTERNAL_SERVER_ERROR, "storage error".into())
+            ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "storage error", codes::STORAGE_ERROR)
         })
     }
 }
@@ -152,18 +153,46 @@ pub fn prune_database(path: &Path) -> msgkit_core::Result<usize> {
     SqliteStore::open(path)?.prune_acknowledged(DEFAULT_RETENTION)
 }
 
-struct ApiError(StatusCode, String);
+/// An error response: `{"error": "<text>", "code": "<stable code>"}` (see docs/ERRORS.md). The text is for
+/// people and may be reworded; the code is the contract.
+struct ApiError(StatusCode, String, &'static str);
 
-impl IntoResponse for ApiError {
-    fn into_response(self) -> Response {
-        (self.0, Json(json!({ "error": self.1 }))).into_response()
+impl ApiError {
+    fn new(status: StatusCode, message: impl Into<String>, code: &'static str) -> Self {
+        ApiError(status, message.into(), code)
     }
 }
 
-// Takes the message by value because it is also used directly as `map_err(bad_request)`.
-#[allow(clippy::needless_pass_by_value)]
-fn bad_request(msg: impl ToString) -> ApiError {
-    ApiError(StatusCode::BAD_REQUEST, msg.to_string())
+impl IntoResponse for ApiError {
+    fn into_response(self) -> Response {
+        (self.0, Json(json!({ "error": self.1, "code": self.2 }))).into_response()
+    }
+}
+
+/// A request msgkit's core refused: the core's own error code (`invalid_input` or `parse_error`).
+fn core_error(e: &msgkit_core::Error) -> ApiError {
+    ApiError::new(StatusCode::BAD_REQUEST, e.to_string(), e.code())
+}
+
+/// A request whose body or query could not be used (`invalid_input`), or was too large (`limit_exceeded`).
+fn rejected(status: StatusCode, message: impl Into<String>) -> ApiError {
+    let code =
+        if status == StatusCode::PAYLOAD_TOO_LARGE { codes::LIMIT_EXCEEDED } else { codes::INVALID_INPUT };
+    ApiError::new(status, message, code)
+}
+
+/// axum answers a body over the limit with a plain-text 413 when the handler reads `String` or `Bytes`. Give those
+/// the same JSON error (and code) as every other error response.
+async fn json_payload_too_large(res: Response) -> Response {
+    let is_json = res
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.starts_with("application/json"));
+    if res.status() == StatusCode::PAYLOAD_TOO_LARGE && !is_json {
+        return rejected(StatusCode::PAYLOAD_TOO_LARGE, "the request body is too large").into_response();
+    }
+    res
 }
 
 /// A JSON request body whose rejection never repeats the body.
@@ -182,7 +211,7 @@ where
     async fn from_request(req: Request, state: &S) -> Result<Self, ApiError> {
         match Json::<T>::from_request(req, state).await {
             Ok(Json(value)) => Ok(AppJson(value)),
-            Err(rejection) => Err(ApiError(rejection.status(), json_rejection_text(&rejection).to_owned())),
+            Err(rejection) => Err(rejected(rejection.status(), json_rejection_text(&rejection))),
         }
     }
 }
@@ -212,9 +241,9 @@ where
             Ok(Query(value)) => Ok(AppQuery(value)),
             Err(rejection) => {
                 let QueryRejection::FailedToDeserializeQueryString(_) = &rejection else {
-                    return Err(ApiError(rejection.status(), "the query string was rejected".to_owned()));
+                    return Err(rejected(rejection.status(), "the query string was rejected"));
                 };
-                Err(ApiError(StatusCode::BAD_REQUEST, "the query string is invalid".to_owned()))
+                Err(rejected(StatusCode::BAD_REQUEST, "the query string is invalid"))
             }
         }
     }
@@ -238,8 +267,12 @@ async fn require_token(State(state): State<AppState>, req: Request, next: Next) 
             .and_then(|v| v.to_str().ok())
             .and_then(|v| v.strip_prefix("Bearer "));
         if !supplied.is_some_and(|s| secrets_match(s, expected)) {
-            return ApiError(StatusCode::UNAUTHORIZED, "missing or invalid bearer token".into())
-                .into_response();
+            return ApiError::new(
+                StatusCode::UNAUTHORIZED,
+                "missing or invalid bearer token",
+                codes::UNAUTHORIZED,
+            )
+            .into_response();
         }
     }
     next.run(req).await
@@ -248,7 +281,7 @@ async fn require_token(State(state): State<AppState>, req: Request, next: Next) 
 async fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> Result<T, ApiError> {
     tokio::task::spawn_blocking(f)
         .await
-        .map_err(|_| ApiError(StatusCode::INTERNAL_SERVER_ERROR, "worker failed".into()))
+        .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "worker failed", codes::INTERNAL_ERROR))
 }
 
 async fn version() -> Json<Value> {
@@ -270,7 +303,7 @@ async fn import_facebook(
     AppJson(thread): AppJson<Value>,
 ) -> Result<Json<ImportReport>, ApiError> {
     let report = blocking(move || facebook::parse_value(thread, &opts)).await?;
-    report.map(Json).map_err(bad_request)
+    report.map(Json).map_err(|e| core_error(&e))
 }
 
 async fn import_device(
@@ -320,14 +353,20 @@ struct VerifyQuery {
 /// Meta's webhook subscription handshake: echo `hub.challenge` if the token matches.
 fn verify_subscription(cfg: Option<&WebhookConfig>, q: VerifyQuery) -> Response {
     let Some(cfg) = cfg else {
-        return ApiError(StatusCode::SERVICE_UNAVAILABLE, "webhook not configured".into()).into_response();
+        return ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "webhook not configured",
+            codes::NOT_CONFIGURED,
+        )
+        .into_response();
     };
     let ok = !cfg.verify_token.is_empty()
         && q.mode.as_deref() == Some("subscribe")
         && q.token.as_deref().is_some_and(|t| secrets_match(t, &cfg.verify_token));
     match (ok, q.challenge) {
         (true, Some(challenge)) => challenge.into_response(),
-        _ => ApiError(StatusCode::FORBIDDEN, "verification failed".into()).into_response(),
+        _ => ApiError::new(StatusCode::FORBIDDEN, "verification failed", codes::VERIFICATION_FAILED)
+            .into_response(),
     }
 }
 
@@ -340,26 +379,32 @@ async fn receive_webhook(
 ) -> Response {
     // Refuse to process anything unauthenticated, even when unconfigured.
     let Some(cfg) = cfg else {
-        return ApiError(StatusCode::SERVICE_UNAVAILABLE, "webhook not configured".into()).into_response();
+        return ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "webhook not configured",
+            codes::NOT_CONFIGURED,
+        )
+        .into_response();
     };
     let signature = headers.get("x-hub-signature-256").and_then(|v| v.to_str().ok()).unwrap_or("");
     if !webhook::verify_signature(cfg.app_secret.as_bytes(), body, signature) {
-        return ApiError(StatusCode::UNAUTHORIZED, "invalid signature".into()).into_response();
+        return ApiError::new(StatusCode::UNAUTHORIZED, "invalid signature", codes::SIGNATURE_INVALID)
+            .into_response();
     }
 
     let payload: Value = match serde_json::from_slice(body) {
         Ok(v) => v,
         Err(e) => {
-            return bad_request(format!(
-                "invalid JSON: {}",
-                msgkit_core::error::describe_json_error(&e, true)
-            ))
+            return rejected(
+                StatusCode::BAD_REQUEST,
+                format!("invalid JSON: {}", msgkit_core::error::describe_json_error(&e, true)),
+            )
             .into_response()
         }
     };
     let report = match normalize(&payload) {
         Ok(r) => r,
-        Err(e) => return bad_request(e).into_response(),
+        Err(e) => return core_error(&e).into_response(),
     };
 
     // The batch is stored atomically. If storage fails we answer 500 *without*
@@ -415,5 +460,10 @@ pub fn router(state: AppState) -> Router {
         .route("/webhooks/messenger", get(messenger_verify).post(messenger_receive))
         .layer(DefaultBodyLimit::max(WEBHOOK_LIMIT_BYTES));
 
-    Router::new().route("/healthz", get(|| async { "ok" })).merge(v1).merge(webhooks).with_state(state)
+    Router::new()
+        .route("/healthz", get(|| async { "ok" }))
+        .merge(v1)
+        .merge(webhooks)
+        .layer(middleware::map_response(json_payload_too_large))
+        .with_state(state)
 }

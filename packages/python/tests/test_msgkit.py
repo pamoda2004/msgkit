@@ -26,7 +26,7 @@ def calls(report: Any) -> List[Any]:
 class VersionTests(unittest.TestCase):
     def test_versions_agree(self) -> None:
         info = msgkit.version()
-        self.assertEqual(info["schema_version"], "1.0.0")
+        self.assertEqual(info["schema_version"], "1.1.0")
         self.assertEqual(info["crate_version"], msgkit.__version__)
         self.assertEqual(msgkit.native_version(), msgkit.__version__)
 
@@ -53,6 +53,18 @@ class WhatsAppExportTests(unittest.TestCase):
         self.assertEqual(r["events"][0]["timestamp"], "2023-12-31T16:11:00Z")
         self.assertEqual(r["events"][0]["direction"], "outbound")
         self.assertEqual(r["events"][1]["direction"], "inbound")
+
+    def test_time_zone_follows_daylight_saving(self) -> None:
+        text = "15/01/2024, 12:00 - A: x\n15/07/2024, 12:00 - A: y\n"
+        r = msgkit.parse_whatsapp_export(text, date_order="dmy", time_zone="America/New_York")
+        self.assertEqual([e["timestamp"] for e in r["events"]], ["2024-01-15T17:00:00Z", "2024-07-15T16:00:00Z"])
+        self.assertRegex(msgkit.version()["tzdata_version"], r"^\d{4}[a-z]$")
+
+    def test_unknown_time_zone_is_invalid_input(self) -> None:
+        with self.assertRaises(msgkit.MsgkitError) as caught:
+            msgkit.parse_whatsapp_export("01/02/2024, 10:00 - A: x\n", time_zone="Mars/Phobos")
+        self.assertEqual(caught.exception.code, "invalid_input")
+        self.assertNotIn("Phobos", str(caught.exception))
 
     def test_explicit_date_order(self) -> None:
         text = "03/04/2024, 10:00 - A: x\n"

@@ -87,12 +87,20 @@ export interface WhatsAppExportOptions {
   date_order?: DateOrder;
   /**
    * Offset of the phone's local time zone from UTC, in minutes (e.g. `330` for UTC+05:30). Exports
-   * carry no time zone. Defaults to `0`.
+   * carry no time zone. Defaults to `0`. Ignored when `time_zone` is set.
    */
   utc_offset_minutes?: number;
   conversation_id?: string | null;
   /** Calling code (digits, e.g. `"94"`) used to normalize sender names that are national phone numbers. */
   default_country_code?: string | null;
+  /**
+   * IANA time-zone name of the phone (exact spelling, e.g. `"Asia/Colombo"`). When set it replaces
+   * `utc_offset_minutes` and follows the zone's daylight-saving rules; event ids do not depend on it.
+   * A time in a repeated hour uses the first occurrence and a time in a skipped hour moves forward by
+   * the gap (reported in one warning). The zone database is bundled with msgkit, so results are the
+   * same everywhere.
+   */
+  time_zone?: string | null;
 }
 
 export interface FacebookExportOptions {
@@ -146,6 +154,8 @@ export interface VersionInfo {
   crate_version: string;
   schema_version: string;
   operations: string[];
+  /** Version of the bundled IANA time-zone database (for example `2026e`). */
+  tzdata_version: string;
 }
 
 export type ErrorCode = 'invalid_input' | 'parse_error' | 'unknown_op' | 'storage_error' | 'internal_error';

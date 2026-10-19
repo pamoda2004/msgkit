@@ -17,6 +17,10 @@ workspace = true
 [dependencies]
 chrono = { version = "0.4.45", default-features = false, features = ["std", "serde"] }
 hex = "0.4.3"
+# The IANA time-zone database is bundled in the binary and pinned exactly: a bump can change computed UTC
+# timestamps, so it is reviewed as a behaviour change (CONTRIBUTING.md, "Time-zone data"). No OS time-zone files.
+jiff = { version = "=0.2.38", default-features = false, features = ["std", "tzdb-bundle-always"] }
+jiff-tzdb = "=0.1.9"
 hmac = "0.13.0"
 regex = "1.13.1"
 schemars = { version = "1.2.3", features = ["chrono04"] }

@@ -1,0 +1,14 @@
+{
+  "op": "parse_whatsapp_export",
+  "input": {
+    "options": {
+      "date_order": "dmy",
+      "time_zone": "Australia/Lord_Howe"
+    }
+  },
+  "files": {
+    "text": "chat.txt"
+  },
+  "json_files": {},
+  "note": "Australia/Lord_Howe changes by 30 minutes, not an hour"
+}

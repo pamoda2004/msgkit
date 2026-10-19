@@ -61,6 +61,9 @@ enum Command {
         /// Calling code, e.g. 94, for national-format phone numbers.
         #[arg(long)]
         default_country_code: Option<String>,
+        /// IANA time zone of the phone, e.g. Asia/Colombo; replaces --utc-offset-minutes.
+        #[arg(long)]
+        time_zone: Option<String>,
     },
     /// Import Facebook Messenger `message_N.json` files.
     FacebookExport {
@@ -101,6 +104,7 @@ fn run(cli: Cli) -> Result<ImportReport, String> {
             utc_offset_minutes,
             conversation_id,
             default_country_code,
+            time_zone,
         } => {
             let opts = WhatsAppExportOptions {
                 self_name,
@@ -108,8 +112,9 @@ fn run(cli: Cli) -> Result<ImportReport, String> {
                 utc_offset_minutes,
                 conversation_id,
                 default_country_code,
+                time_zone,
             };
-            Ok(whatsapp_export::parse(&read(&file)?, &opts))
+            whatsapp_export::try_parse(&read(&file)?, &opts).map_err(|e| e.to_string())
         }
         Command::FacebookExport { files, self_name } => {
             let opts = FacebookExportOptions { self_name, ..Default::default() };

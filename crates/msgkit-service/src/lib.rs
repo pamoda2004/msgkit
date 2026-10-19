@@ -295,7 +295,8 @@ async fn import_whatsapp(
     AppQuery(opts): AppQuery<WhatsAppExportOptions>,
     body: String,
 ) -> Result<Json<ImportReport>, ApiError> {
-    Ok(Json(blocking(move || whatsapp_export::parse(&body, &opts)).await?))
+    let report = blocking(move || whatsapp_export::try_parse(&body, &opts)).await?;
+    report.map(Json).map_err(|e| core_error(&e))
 }
 
 async fn import_facebook(

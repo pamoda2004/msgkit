@@ -205,9 +205,17 @@
           "null"
         ]
       },
+      "time_zone": {
+        "default": null,
+        "description": "IANA time-zone name of the phone (exact spelling, e.g. `\"Asia/Colombo\"`). When set it replaces\n`utc_offset_minutes` and follows the zone's daylight-saving rules; event ids do not depend on it. A\ntime in a repeated hour uses the first occurrence and a time in a skipped hour moves forward by the gap\n(reported in one warning). The zone database is bundled with msgkit, so results are the same everywhere.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
       "utc_offset_minutes": {
         "default": 0,
-        "description": "Offset of the phone's local time zone from UTC, in minutes\n(e.g. `330` for UTC+05:30). Exports carry no time zone. Defaults to `0`.",
+        "description": "Offset of the phone's local time zone from UTC, in minutes\n(e.g. `330` for UTC+05:30). Exports carry no time zone. Defaults to `0`. Ignored when `time_zone` is set.",
         "format": "int32",
         "type": "integer"
       }
@@ -215,5 +223,5 @@
     "title": "WhatsAppExportOptions",
     "type": "object"
   },
-  "x-msgkit-schema-version": "1.0.0"
+  "x-msgkit-schema-version": "1.1.0"
 }

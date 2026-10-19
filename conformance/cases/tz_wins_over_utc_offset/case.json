@@ -1,0 +1,15 @@
+{
+  "op": "parse_whatsapp_export",
+  "input": {
+    "options": {
+      "date_order": "dmy",
+      "time_zone": "Asia/Colombo",
+      "utc_offset_minutes": 600
+    }
+  },
+  "files": {
+    "text": "chat.txt"
+  },
+  "json_files": {},
+  "note": "time_zone replaces utc_offset_minutes: the result equals tz_colombo_ordinary"
+}

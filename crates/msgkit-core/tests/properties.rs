@@ -111,10 +111,42 @@ fn json_value() -> impl Strategy<Value = Value> {
     })
 }
 
+fn time_zone() -> impl Strategy<Value = &'static str> {
+    prop::sample::select(vec![
+        "Asia/Colombo",
+        "America/New_York",
+        "Europe/London",
+        "Australia/Lord_Howe",
+        "Pacific/Apia",
+        "UTC",
+    ])
+}
+
 // ---- properties -----------------------------------------------------------------------------------------
 
 proptest! {
     #![proptest_config(config())]
+
+    #[test]
+    fn ids_ignore_the_time_zone(text in chat(), zone in time_zone()) {
+        let with_zone = WhatsAppExportOptions { time_zone: Some(zone.to_owned()), ..options(DateOrder::Dmy, 0, None) };
+        let (a, b) = (parse(&text, &options(DateOrder::Dmy, 0, None)), parse(&text, &with_zone));
+        prop_assert_eq!(a.events.len(), b.events.len());
+        prop_assert_eq!(ids(&a), ids(&b));
+    }
+
+    #[test]
+    fn any_time_zone_text_is_refused_without_panicking_or_being_repeated(name in any::<String>()) {
+        let marked = format!("ZXQMARKER{name}");
+        let input = json!({ "text": "01/02/2024, 10:00 - A: x\n", "options": { "time_zone": marked } }).to_string();
+        let out: Value = serde_json::from_str(&api::dispatch("parse_whatsapp_export", &input)).unwrap();
+        prop_assert_eq!(&out["ok"], &json!(false));
+        prop_assert_eq!(&out["error"]["code"], &json!("invalid_input"));
+        prop_assert!(!out["error"]["message"].as_str().unwrap().contains("ZXQMARKER"));
+        // And without the marker the name may even be valid, but nothing panics.
+        let plain = json!({ "text": "01/02/2024, 10:00 - A: x\n", "options": { "time_zone": name } }).to_string();
+        let _ = api::dispatch("parse_whatsapp_export", &plain);
+    }
 
     #[test]
     fn whatsapp_parser_never_panics_on_any_text(text in any::<String>(), offset in -2000i32..=2000, order in date_order()) {

@@ -1,0 +1,14 @@
+{
+  "op": "parse_whatsapp_export",
+  "input": {
+    "options": {
+      "date_order": "dmy",
+      "time_zone": "America/New_York"
+    }
+  },
+  "files": {
+    "text": "chat.txt"
+  },
+  "json_files": {},
+  "note": "a repeated hour (clocks back 02:00 to 01:00) uses the first occurrence; one warning"
+}

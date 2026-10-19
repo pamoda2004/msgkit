@@ -41,6 +41,7 @@ paths:
         - { name: utc_offset_minutes, in: query, schema: { type: integer, default: 0 } }
         - { name: conversation_id, in: query, schema: { type: string } }
         - { name: default_country_code, in: query, schema: { type: string }, description: "Digits, e.g. 94" }
+        - { name: time_zone, in: query, schema: { type: string }, description: "Exact IANA zone name, e.g. Asia/Colombo; replaces utc_offset_minutes and follows daylight saving. An unknown name answers 400 invalid_input" }
       requestBody:
         required: true
         content:

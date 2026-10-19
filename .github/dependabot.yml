@@ -7,6 +7,9 @@ updates:
     groups:
       rust-minor-and-patch:
         update-types: [minor, patch]
+        # The bundled time-zone data changes computed timestamps: each bump is its own pull request and is
+        # reviewed as a behaviour change (CONTRIBUTING.md, "Time-zone data").
+        exclude-patterns: ["jiff", "jiff-tzdb"]
   - package-ecosystem: npm
     directory: /packages/node
     schedule: { interval: weekly }

@@ -1,0 +1,14 @@
+{
+  "op": "parse_whatsapp_export",
+  "input": {
+    "options": {
+      "date_order": "dmy",
+      "time_zone": "+05:30"
+    }
+  },
+  "files": {
+    "text": "chat.txt"
+  },
+  "json_files": {},
+  "note": "a UTC offset is not an IANA zone name (use utc_offset_minutes for offsets)"
+}

@@ -17,7 +17,7 @@ test('package version matches the Rust workspace version', () => {
   const cargo = readFileSync(new URL('../../../Cargo.toml', import.meta.url), 'utf8');
   assert.equal(pkg.version, /^version = "(.+)"$/m.exec(cargo)[1]);
   assert.equal(msgkit.version().crate_version, pkg.version);
-  assert.equal(msgkit.version().schema_version, '1.0.0');
+  assert.equal(msgkit.version().schema_version, '1.1.0');
 });
 
 test('WhatsApp export: Android day-first', () => {
@@ -41,6 +41,23 @@ test('WhatsApp export: options are applied', () => {
   assert.equal(r.events[0].timestamp, '2023-12-31T16:11:00Z');
   assert.equal(r.events[0].direction, 'outbound');
   assert.equal(r.events[1].direction, 'inbound');
+});
+
+test('WhatsApp export: a time zone follows daylight saving', () => {
+  const text = '15/01/2024, 12:00 - A: x\n15/07/2024, 12:00 - A: y\n';
+  const r = msgkit.parseWhatsAppExport(text, { date_order: 'dmy', time_zone: 'America/New_York' });
+  assert.deepEqual(
+    r.events.map((e) => e.timestamp),
+    ['2024-01-15T17:00:00Z', '2024-07-15T16:00:00Z'],
+  );
+  assert.match(msgkit.version().tzdata_version, /^\d{4}[a-z]$/);
+});
+
+test('WhatsApp export: an unknown time zone is invalid input and is not repeated', () => {
+  assert.throws(
+    () => msgkit.parseWhatsAppExport('01/02/2024, 10:00 - A: x\n', { time_zone: 'Mars/Phobos' }),
+    (e) => e.code === 'invalid_input' && !e.message.includes('Phobos'),
+  );
 });
 
 test('WhatsApp export: month-first 12-hour clock', () => {
@@ -146,8 +163,8 @@ test('no memory leak across many calls', () => {
 test('initSync with explicit bytes and a fresh async init both work', async () => {
   const bytes = readFileSync(fileURLToPath(new URL('../dist/msgkit.wasm', import.meta.url)));
   msgkit.initSync(bytes);
-  assert.equal(msgkit.version().schema_version, '1.0.0');
+  assert.equal(msgkit.version().schema_version, '1.1.0');
   await msgkit.init(bytes);
-  assert.equal(msgkit.version().schema_version, '1.0.0');
+  assert.equal(msgkit.version().schema_version, '1.1.0');
   await assert.rejects(() => msgkit.init(42), TypeError);
 });

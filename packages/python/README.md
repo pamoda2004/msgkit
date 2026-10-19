@@ -22,7 +22,7 @@ No dependencies. The wheel bundles the native msgkit library (loaded with `ctype
 
 | Function | Purpose |
 |---|---|
-| `parse_whatsapp_export(text, *, self_name, date_order, utc_offset_minutes, conversation_id, default_country_code)` | WhatsApp "Export chat" `.txt` |
+| `parse_whatsapp_export(text, *, self_name, date_order, utc_offset_minutes, conversation_id, default_country_code, time_zone)` | WhatsApp "Export chat" `.txt` |
 | `parse_facebook_export(thread, *, self_name, conversation_id)` | one Messenger `message_N.json` (object or text) |
 | `normalize_device(batch, *, own_number, default_country_code)` | Android SMS / call-log rows |
 | `normalize_whatsapp_webhook(payload)` | WhatsApp Business Cloud API webhook |

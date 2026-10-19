@@ -69,3 +69,28 @@ The Rust types in `crates/msgkit-core/src/model.rs` are the contract.
 * Small, focused, with tests.
 * Don't add dependencies lightly; the core is deliberately lean and portable (no I/O, no platform code).
 * Out of scope: reading data without the account owner's consent, or using unofficial/ToS-violating access to WhatsApp, Facebook or other platforms.
+
+## Time-zone data (`jiff`, `jiff-tzdb`)
+
+`time_zone` (an IANA name such as `Asia/Colombo`) is resolved with a time-zone database that is **bundled in the
+binary**: `jiff` and `jiff-tzdb`, pinned to exact versions (`=0.2.38`, `=0.1.9`) with default features off and
+`tzdb-bundle-always` on. Nothing reads the operating system's time-zone files or the system clock, so a name gives the
+same UTC instant in every binding on every platform; `crates/msgkit-core/tests/purity.rs` fails if that ever changes.
+
+The IANA database is updated several times a year (new laws, corrections, rare changes to past offsets), and a new
+release can change the UTC timestamp computed for a local time in some zones. So **a `jiff` or `jiff-tzdb` bump is a
+behaviour change and is reviewed as one**:
+
+1. **Dependabot opens it as its own pull request** (these crates are excluded from the grouped Rust updates). Never
+   merge it, and never rebase-merge it from the command line, without the review below.
+2. **Find the zones that changed.** Run `cargo run --release -p msgkit-core --example tz_fingerprint > before.txt` on
+   `main` and again on the pull request's branch (`after.txt`); `diff before.txt after.txt` lists every zone whose
+   offsets between 1970 and 2040 changed, and the first line of each file gives the tzdata version.
+3. **Update the pin test.** `crates/msgkit-core/tests/tzdata_pin.rs` fails on the new database until its
+   `EXPECTED_TZDATA` constant is updated; that failure is what keeps an automated update from being merged by
+   accident (the Rust tests are a required check).
+4. **Write the CHANGELOG entry** under "Changed": the old and the new tzdata version, the zones whose rules changed
+   (from step 2) and what that means (for example "Africa/Casablanca: local times after September 2026 are one hour
+   different"). If a zone used by a conformance case changed, say so and regenerate the case.
+5. **Check the size** reported by CI (`SIZE` lines in the Python, Node.js and Android jobs) against the previous run.
+

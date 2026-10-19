@@ -1,0 +1,14 @@
+{
+  "op": "parse_whatsapp_export",
+  "input": {
+    "options": {
+      "date_order": "dmy",
+      "time_zone": "Asia/Colombo"
+    }
+  },
+  "files": {
+    "text": "chat.txt"
+  },
+  "json_files": {},
+  "note": "time_zone Asia/Colombo (UTC+05:30, no daylight saving): ordinary times, no warning"
+}

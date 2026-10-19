@@ -19,7 +19,7 @@ The set only grows. A code is never renamed, and never reused for a different si
 <!-- codes:begin -->
 | Code | Meaning | Returned by | HTTP status | Covered by |
 |---|---|---|---|---|
-| `invalid_input` | The request could not be used: wrong JSON shape or types, a missing field, a bad option value, an unusable query string or content type. | all operations; HTTP | 400, 415, 422 | `conformance/cases/invalid_input_missing_field`, `crates/msgkit-service/tests/error_codes.rs::http_error_responses_carry_stable_codes` |
+| `invalid_input` | The request could not be used: wrong JSON shape or types, a missing field, a bad option value (including an unknown `time_zone`), an unusable query string or content type. | all operations; HTTP | 400, 415, 422 | `conformance/cases/invalid_input_missing_field`, `crates/msgkit-service/tests/error_codes.rs::http_error_responses_carry_stable_codes` |
 | `parse_error` | The input is well-formed but is not a supported export or webhook (for example a file that is not a Facebook messages export, or a webhook for the wrong platform). | the Facebook export and webhook operations; HTTP | 400 | `conformance/cases/facebook_not_an_export`, `crates/msgkit-service/tests/error_codes.rs::http_error_responses_carry_stable_codes` |
 | `unknown_op` | The operation name is not one of the supported operations (`version().operations`). | the operation dispatcher | none: unknown HTTP routes answer 404 with no body | `conformance/cases/unknown_operation` |
 | `storage_error` | A store backend failed: disk full, an unusable or corrupt database. The text carries no stored content. | store backends such as `SqliteStore`; HTTP | 500 | `crates/msgkit-store-sqlite/src/lib.rs::rejects_files_that_are_not_databases` |

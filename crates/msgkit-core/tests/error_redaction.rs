@@ -26,6 +26,9 @@ fn inputs() -> Vec<(&'static str, String)> {
     add("parse_whatsapp_export", json!({ "text": "x", "options": { "utc_offset_minutes": m } }));
     add("parse_whatsapp_export", json!({ "text": "x", "options": { "self_name": { m: 1 } } }));
     add("parse_whatsapp_export", json!({ "text": "x", "options": { m: 1 } }));
+    add("parse_whatsapp_export", json!({ "text": "x", "options": { "time_zone": m } }));
+    add("parse_whatsapp_export", json!({ "text": "x", "options": { "time_zone": { m: 1 } } }));
+    add("parse_whatsapp_export", json!({ "text": "x", "options": { "time_zone": [m] } }));
     add("parse_facebook_export", json!({ "thread": m }));
     add("parse_facebook_export", json!({ "thread": { "messages": m } }));
     add("parse_facebook_export", json!({ "thread": { "messages": [{ "sender_name": 1, "content": m }] } }));

@@ -1,0 +1,3 @@
+25/05/1996, 00:15 - Alex: skipped hour in 1996
+26/10/1996, 00:15 - Sam: repeated half hour in 1996
+15/04/2006, 00:15 - Alex: offset change in 2006

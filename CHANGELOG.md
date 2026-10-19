@@ -22,6 +22,23 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 ### Changed (tests and fixtures only, Phase 3)
 - **Example phone numbers are now obviously fictional** (audit finding F22). The Sri Lankan mobile number that tests, fixtures, conformance cases, the fuzz corpus and docs used (in its international, national, bare and spaced or hyphenated forms) is replaced everywhere by `+94700000000` / `0700000000`. Production code is unchanged. Because event ids are derived from the sender text, the expected ids of 10 events in 3 conformance cases changed (`device_batch`, `ids_phone_senders_country_94`, `ids_phone_senders_no_country_code`); a fourth case (`whatsapp_webhook`) changed only in text. Nothing else in any expected output differs.
 
+### Changed (HTTP service, Phase 3)
+- **A 413 (request body too large) on the text import and webhook POST endpoints is now a JSON error.** The status is unchanged. Before, the body was axum's plain text (`Content-Type: text/plain; charset=utf-8`):
+  ```
+  Failed to buffer the request body: length limit exceeded
+  ```
+  Now it is the same JSON as every other error (`Content-Type: application/json`):
+  ```json
+  {"error": "the request body is too large", "code": "limit_exceeded"}
+  ```
+  Affected: `POST /v1/import/whatsapp-export` (over 64 MiB) and `POST /webhooks/whatsapp` and `/webhooks/messenger` (over 2 MiB). The JSON endpoints already answered 413 with JSON and keep their text (`the request body could not be read (too large?)`), now with `"code": "limit_exceeded"` added. Clients that read the 413 body as text and matched the old sentence need to read `code` instead.
+
+### Added (error taxonomy, Phase 3)
+- **One list of stable error codes** (`docs/ERRORS.md`, `msgkit_core::error::codes`) shared by the Rust core, the Python, Node.js and Kotlin packages, the C and WebAssembly ABIs and the HTTP service. **Every existing code keeps its meaning and is returned for exactly the same inputs as before** (`invalid_input`, `parse_error`, `unknown_op`, `storage_error`, `internal_error`): all 54 conformance cases pass unchanged in the Rust, Python, Node.js, Kotlin and HTTP runners, and no expected file was edited.
+- **HTTP error responses now carry a `code`** next to the unchanged `error` text and unchanged HTTP status: `{"error": "...", "code": "..."}`. Five codes are new and are returned only by the HTTP service, for situations that previously had only a status and a text: `limit_exceeded` (413), `unauthorized` (401, bearer token), `signature_invalid` (401, webhook signature), `verification_failed` (403, webhook handshake) and `not_configured` (503). The library operations return no new code; `verify_signature` still answers `{"valid": false}`.
+- `openapi.yaml`: the `Error` schema gains `code`; POST operations document the 413 response.
+- The HTTP conformance runner now also sends the failing import cases through the service and requires the same `code` as the library; `crates/msgkit-service/tests/error_codes.rs` pins the status, code and text of every HTTP error response; `crates/msgkit-core/tests/error_taxonomy.rs` keeps the code, the documentation and `openapi.yaml` in step and checks that every code's test or case exists.
+
 ### Added (testing depth, Phase 2)
 - **Conformance suite** (`conformance/`): 54 language-independent cases (input files plus the expected canonical JSON response) that the Rust core, the Python wheel, the Node.js WebAssembly package, the Kotlin/JNA package and the HTTP service must reproduce byte for byte; CI fails on any difference. Covers day/month ambiguity, 12/24-hour clocks, multi-line messages, media and system notices, deleted/edited messages, group chats, Facebook mojibake repair, emoji, Sinhala, Tamil and right-to-left text, very long messages, empty/truncated files, CRLF/LF/BOM variants, the id rules, signatures and error envelopes. See `conformance/README.md`.
 - **Fuzz targets** (`fuzz/`, cargo-fuzz): the WhatsApp and Facebook parsers, the device normalizer, both webhook normalizers, the signature verifier and the JSON entry point, with a seed corpus taken from the conformance cases. CI fuzzes each target for 60 seconds on Linux; `crates/msgkit-core/tests/fuzz_corpus.rs` replays the corpus on every platform.

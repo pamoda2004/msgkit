@@ -99,6 +99,18 @@ mod tests {
     }
 
     #[test]
+    fn fixed_envelopes_use_taxonomy_codes() {
+        use msgkit_core::error::codes;
+        let code = |envelope: &str| {
+            let v: serde_json::Value = serde_json::from_str(envelope).unwrap();
+            v["error"]["code"].as_str().unwrap().to_owned()
+        };
+        assert_eq!(code(INTERNAL_ERROR), codes::INTERNAL_ERROR);
+        assert_eq!(code(NULL_ARGUMENT), codes::INVALID_INPUT);
+        assert_eq!(code(BAD_UTF8), codes::INVALID_INPUT);
+    }
+
+    #[test]
     fn null_arguments_are_rejected_not_dereferenced() {
         // SAFETY: NULL is explicitly allowed.
         let raw = unsafe { msgkit_call(ptr::null(), ptr::null()) };

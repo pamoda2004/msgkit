@@ -1,7 +1,7 @@
 //! Runs the HTTP-reachable part of the language-independent conformance suite (`conformance/`) against the
-//! service router: the three import endpoints must return exactly the `data` of the expected envelope.
-//! Operations without an HTTP endpoint (webhook normalization without a store, signatures, errors) are
-//! covered by the other runners.
+//! service router: the three import endpoints must return exactly the `data` of the expected envelope, and the
+//! import cases that fail must be refused with the same error `code` as the library. Operations without an HTTP
+//! endpoint (webhook normalization without a store, signatures, the other errors) are covered by the other runners.
 
 use std::fmt::Write as _;
 use std::fs;
@@ -58,21 +58,20 @@ async fn the_http_service_matches_the_import_cases() {
     names.sort();
 
     let mut checked = 0;
+    let mut checked_errors = 0;
     let mut failures = Vec::new();
     for dir in names {
         let name = dir.file_name().unwrap().to_string_lossy().into_owned();
         let spec: Value = serde_json::from_str(&fs::read_to_string(dir.join("case.json")).unwrap()).unwrap();
         let expected: Value =
             serde_json::from_str(&fs::read_to_string(dir.join("expected.json")).unwrap()).unwrap();
-        if expected["ok"] != true {
-            continue;
-        }
+        let expects_error = expected["ok"] != true;
         let read = |files: &Value, key: &str| {
             files.get(key).and_then(Value::as_str).map(|n| fs::read_to_string(dir.join(n)).unwrap())
         };
         let options = &spec["input"]["options"];
         let (path, content_type, body) = match spec["op"].as_str().unwrap() {
-            "parse_whatsapp_export" => {
+            "parse_whatsapp_export" if !expects_error => {
                 let text = read(&spec["files"], "text")
                     .or_else(|| spec["input"]["text"].as_str().map(str::to_owned));
                 ("/v1/import/whatsapp-export", "text/plain; charset=utf-8", text.unwrap())
@@ -96,6 +95,18 @@ async fn the_http_service_matches_the_import_cases() {
         let response = app.clone().oneshot(request).await.unwrap();
         let status = response.status();
         let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        if expects_error {
+            // The service must refuse the request with the same stable code as the library (docs/ERRORS.md).
+            let actual: Value = serde_json::from_slice(&bytes).unwrap();
+            if !status.is_client_error() || actual["code"] != expected["error"]["code"] {
+                failures.push(format!(
+                    "{name}: HTTP {status}, code {} (want {})",
+                    actual["code"], expected["error"]["code"]
+                ));
+            }
+            checked_errors += 1;
+            continue;
+        }
         if status != StatusCode::OK {
             failures.push(format!("{name}: HTTP {status}"));
             continue;
@@ -110,5 +121,6 @@ async fn the_http_service_matches_the_import_cases() {
         checked += 1;
     }
     assert!(checked >= 25, "only {checked} cases were checked over HTTP");
+    assert!(checked_errors >= 3, "only {checked_errors} error cases were checked over HTTP");
     assert!(failures.is_empty(), "HTTP conformance failures:\n{}", failures.join("\n"));
 }

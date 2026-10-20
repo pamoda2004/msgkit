@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 use std::time::Duration;
 
-use msgkit_service::{prune_database, router, AppState, Config};
+use msgkit_service::{check_bind, prune_database, router, AppState, Config};
 use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 
@@ -18,9 +18,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let bind: SocketAddr =
         std::env::var("MSGKIT_BIND").unwrap_or_else(|_| "127.0.0.1:8080".into()).parse()?;
 
-    if !bind.ip().is_loopback() && config.api_token.is_none() {
-        warn!("listening on a non-loopback address without MSGKIT_API_TOKEN: /v1/* is unauthenticated");
-    }
+    // A non-loopback address without a token would publish the whole API: refuse, with no override.
+    check_bind(bind, &config)?;
     if config.limits.unlimited {
         warn!("MSGKIT_NO_LIMITS is set: input limits are switched off, so a single request can use unbounded memory");
     }

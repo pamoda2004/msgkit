@@ -32,6 +32,7 @@ paths:
                   service_version: { type: string }
                   schema_version: { type: string }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/HostNotAllowed" }
   /v1/import/whatsapp-export:
     post:
       summary: Parse a WhatsApp "Export chat" text file
@@ -50,6 +51,7 @@ paths:
         "200": { $ref: "#/components/responses/ImportReport" }
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/HostNotAllowed" }
   /v1/import/facebook-export:
     post:
       summary: Parse one Messenger `message_N.json` file
@@ -65,6 +67,7 @@ paths:
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/HostNotAllowed" }
   /v1/import/device:
     post:
       summary: Normalize Android SMS and call-log rows
@@ -80,6 +83,7 @@ paths:
         "200": { $ref: "#/components/responses/ImportReport" }
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/HostNotAllowed" }
   /v1/events:
     get:
       summary: Webhook events not yet acknowledged
@@ -99,6 +103,7 @@ paths:
                 type: array
                 items: { $ref: "schema/event.schema.json" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/HostNotAllowed" }
         "500": { $ref: "#/components/responses/Error" }
   /v1/events/ack:
     post:
@@ -127,6 +132,7 @@ paths:
                 properties:
                   acknowledged: { type: integer }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/HostNotAllowed" }
         "500": { $ref: "#/components/responses/Error" }
   /webhooks/whatsapp:
     get:
@@ -199,6 +205,12 @@ components:
     Unauthorized:
       description: Missing or invalid bearer token
       content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    HostNotAllowed:
+      description: >-
+        The service has no API token and the request's `Host` header is not `localhost`, `*.localhost`, a loopback
+        address or an entry of `MSGKIT_ALLOWED_HOSTS` (code `host_not_allowed`). A defence against DNS rebinding;
+        a service with `MSGKIT_API_TOKEN` set does not check the host. `/healthz` and `/webhooks/*` are never checked.
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
     Error:
       description: Error
       content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
@@ -211,4 +223,4 @@ components:
       required: [error, code]
       properties:
         error: { type: string, description: Text for people; may be reworded in any release. }
-        code: { type: string, description: "Stable error code (docs/ERRORS.md); treat a code you do not know as a generic failure. Codes: `invalid_input`, `parse_error`, `unknown_op`, `storage_error`, `internal_error`, `limit_exceeded`, `unauthorized`, `signature_invalid`, `verification_failed`, `not_configured`." }
+        code: { type: string, description: "Stable error code (docs/ERRORS.md); treat a code you do not know as a generic failure. Codes: `invalid_input`, `parse_error`, `unknown_op`, `storage_error`, `internal_error`, `limit_exceeded`, `unauthorized`, `signature_invalid`, `verification_failed`, `not_configured`, `host_not_allowed`." }

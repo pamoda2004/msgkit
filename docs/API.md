@@ -102,8 +102,9 @@ Configuration (environment):
 
 | Variable | Meaning | Default |
 |---|---|---|
-| `MSGKIT_BIND` | listen address | `127.0.0.1:8080` |
-| `MSGKIT_API_TOKEN` | require `Authorization: Bearer <token>` on `/v1/*` | unset (open; keep it on loopback) |
+| `MSGKIT_BIND` | listen address; anything but a loopback address **needs** `MSGKIT_API_TOKEN` (the service refuses to start otherwise) | `127.0.0.1:8080` |
+| `MSGKIT_API_TOKEN` | require `Authorization: Bearer <token>` on `/v1/*` (see [Securing the service](#securing-the-service)) | unset (open; only allowed on loopback) |
+| `MSGKIT_ALLOWED_HOSTS` | comma-separated host names accepted in the `Host` header of `/v1/*` when no token is set, besides `localhost` and loopback addresses | unset |
 | `MSGKIT_WHATSAPP_APP_SECRET` | Meta app secret for signature checks | unset → webhook returns 503 |
 | `MSGKIT_WHATSAPP_VERIFY_TOKEN` | handshake token | unset → handshake rejected |
 | `MSGKIT_MESSENGER_APP_SECRET` / `_VERIFY_TOKEN` | same for Messenger | unset |
@@ -114,6 +115,41 @@ Configuration (environment):
 | `MSGKIT_MAX_JSON_DEPTH` | deepest JSON nesting; at least 1 | 32 |
 | `MSGKIT_NO_LIMITS` | `true` switches every input limit off (a warning is logged at startup) | unset (limits on) |
 | `RUST_LOG` | log level | `info` |
+
+### Securing the service
+
+**Loopback without a token (the default)** is for a single machine you control: the service listens on `127.0.0.1` and answers `/v1/*` to anyone who can reach that port on the machine. Two checks protect it:
+
+* A `Host` header that is not `localhost`, `*.localhost` or a loopback address (and not listed in `MSGKIT_ALLOWED_HOSTS`) is refused with `403` and the code `host_not_allowed`. This stops DNS rebinding, where a web page makes a visitor's browser call your local service under the attacker's host name. Requests without a `Host` header are let through (a browser always sends one). If a reverse proxy on the same machine forwards the public name, list it: `MSGKIT_ALLOWED_HOSTS=msgkit.example.com`.
+* `/healthz` and `/webhooks/*` are never checked: webhook deliveries carry your public host name and are authenticated by their signature.
+
+**Any other address needs a token.** If `MSGKIT_BIND` is not a loopback address (`0.0.0.0`, `[::]`, a LAN or public IP) and `MSGKIT_API_TOKEN` is not set, the service **refuses to start** and says why. There is no override. With a token set, every `/v1/*` request needs `Authorization: Bearer <token>`, and the `Host` header is not checked (a web page cannot know the token).
+
+Make the token long and random (at least 32 random bytes), keep it out of source control and shell history, and give each deployment its own:
+
+```bash
+openssl rand -hex 32
+python -c "import secrets; print(secrets.token_hex(32))"
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+```powershell
+# Windows PowerShell (Get-Random is not suitable for secrets)
+$b = New-Object byte[] 32; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); -join ($b | ForEach-Object { '{0:x2}' -f $_ })
+```
+
+**Docker (the `0.0.0.0` case).** Inside a container the service must listen on `0.0.0.0` for the published port to reach it, so a token is mandatory. Publish the port on the host's loopback unless something in front of it handles TLS and access:
+
+```bash
+export MSGKIT_API_TOKEN="$(openssl rand -hex 32)"      # keep it somewhere safe; your client sends it as a bearer token
+docker run --rm -p 127.0.0.1:8080:8080 \
+  -e MSGKIT_BIND=0.0.0.0:8080 -e MSGKIT_API_TOKEN \
+  -v msgkit-data:/data -e MSGKIT_DB_PATH=/data/events.db \
+  your-msgkit-image
+curl -H "Authorization: Bearer $MSGKIT_API_TOKEN" http://127.0.0.1:8080/v1/version
+```
+
+`-e MSGKIT_API_TOKEN` (no value) passes the variable from your shell without writing it into the command line or the image; for orchestrators use their secret mechanism. Without the token the container exits at start with `refusing to listen on 0.0.0.0:8080 ...`. Serve webhooks over HTTPS only (a reverse proxy or load balancer in front terminates TLS); the service itself speaks plain HTTP.
 
 ### Webhook event storage
 

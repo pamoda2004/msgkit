@@ -60,6 +60,8 @@ curl -H "Authorization: Bearer change-me" --data-binary @chat.txt \
      "http://127.0.0.1:8080/v1/import/whatsapp-export?self_name=Alice"
 ```
 
+The service listens on loopback by default; any other address requires `MSGKIT_API_TOKEN` (generate one with `openssl rand -hex 32`) or it will not start, and without a token a `Host` header other than `localhost` is refused. See [Securing the service](docs/API.md#securing-the-service), including Docker.
+
 Webhook endpoints (`/webhooks/whatsapp`, `/webhooks/messenger`) refuse all traffic until `MSGKIT_*_APP_SECRET` is set and the `X-Hub-Signature-256` header verifies. With `MSGKIT_DB_PATH` set, received events are stored in SQLite and **survive restarts**; read them with `GET /v1/events` and confirm with `POST /v1/events/ack`. See [docs/API.md](docs/API.md#http-sidecar).
 
 ### The same import in each language

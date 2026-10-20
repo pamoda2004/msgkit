@@ -15,6 +15,7 @@
 //!   `X-Hub-Signature-256` header verifies.
 
 use std::fmt;
+use std::net::{IpAddr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
 
@@ -78,6 +79,10 @@ pub struct Config {
     /// Input limits for every import and webhook. Set by the operator only: a request cannot raise them. The
     /// default is [`Limits::default`] (32 MiB bodies); the body of an import is capped at `max_input_bytes`.
     pub limits: Limits,
+    /// Host names (without scheme or path; a port is ignored) accepted in the `Host` header of `/v1/*` requests
+    /// when no `api_token` is set, in addition to `localhost`, `*.localhost` and loopback addresses. See
+    /// [`Config::try_from_env`] (`MSGKIT_ALLOWED_HOSTS`). Ignored when an `api_token` is set.
+    pub allowed_hosts: Vec<String>,
 }
 
 /// Reads one `MSGKIT_MAX_*` value: a whole number of at least 1. Unset or empty keeps the default (`None`).
@@ -88,6 +93,28 @@ fn limit_var(get: &dyn Fn(&str) -> Option<String>, name: &str) -> Result<Option<
         Ok(n) if n >= 1 => Ok(Some(n)),
         _ => Err(format!("{name} must be a whole number of at least 1")),
     }
+}
+
+/// `MSGKIT_ALLOWED_HOSTS`: comma-separated host names, each a plain name or address (no scheme, path, wildcard or
+/// port), stored in lower case.
+fn allowed_hosts_from(get: &dyn Fn(&str) -> Option<String>) -> Result<Vec<String>, String> {
+    let Some(raw) = get("MSGKIT_ALLOWED_HOSTS") else { return Ok(Vec::new()) };
+    let mut hosts = Vec::new();
+    for entry in raw.split(',').map(str::trim).filter(|e| !e.is_empty()) {
+        let name = entry.to_ascii_lowercase();
+        let plain = !name.is_empty()
+            && name
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_' | ':' | '[' | ']'));
+        if !plain {
+            return Err(
+                "MSGKIT_ALLOWED_HOSTS entries must be host names or addresses: no scheme, path or wildcard"
+                    .into(),
+            );
+        }
+        hosts.push(host_without_port(&name).to_owned());
+    }
+    Ok(hosts)
 }
 
 /// `MSGKIT_NO_LIMITS`: `true` or `1` switches every limit off, `false`, `0` or empty leaves them on.
@@ -119,10 +146,12 @@ impl Config {
     ///
     /// # Errors
     /// A message when `MSGKIT_MAX_INPUT_BYTES`, `MSGKIT_MAX_LINE_BYTES`, `MSGKIT_MAX_MESSAGES` or
-    /// `MSGKIT_MAX_JSON_DEPTH` is not a whole number of at least 1, or `MSGKIT_NO_LIMITS` is not `true` or `false`.
+    /// `MSGKIT_MAX_JSON_DEPTH` is not a whole number of at least 1, `MSGKIT_NO_LIMITS` is not `true` or `false`, or an
+    /// entry of `MSGKIT_ALLOWED_HOSTS` is not a plain host name or address.
     pub fn try_from_env() -> Result<Self, String> {
         let limits = limits_from(&|name| std::env::var(name).ok())?;
-        Ok(Self::from_env().with_limits(limits))
+        let allowed_hosts = allowed_hosts_from(&|name| std::env::var(name).ok())?;
+        Ok(Self::from_env().with_limits(limits).with_allowed_hosts(allowed_hosts))
     }
 
     /// Sets [`whatsapp`](Self::whatsapp).
@@ -153,6 +182,20 @@ impl Config {
         self
     }
 
+    /// Sets [`allowed_hosts`](Self::allowed_hosts).
+    #[must_use]
+    pub fn with_allowed_hosts<I, S>(mut self, hosts: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        self.allowed_hosts = hosts
+            .into_iter()
+            .map(|h| host_without_port(&h.as_ref().to_ascii_lowercase()).to_owned())
+            .collect();
+        self
+    }
+
     /// Sets [`limits`](Self::limits).
     #[must_use]
     pub fn with_limits(mut self, limits: Limits) -> Self {
@@ -179,8 +222,79 @@ impl Config {
             api_token: var("MSGKIT_API_TOKEN"),
             db_path: var("MSGKIT_DB_PATH").map(PathBuf::from),
             limits: Limits::default(),
+            allowed_hosts: Vec::new(),
         }
     }
+}
+
+/// Refuses a configuration that would expose an unauthenticated API: a bind address that is not a loopback address
+/// while no `api_token` is set. Anyone who can reach such a port could read and drain the event queue and use the
+/// import endpoints. The binary calls this before it listens; there is deliberately no override.
+///
+/// # Errors
+/// A message that names `MSGKIT_API_TOKEN` and the bind address, and shows how to make a token.
+pub fn check_bind(bind: SocketAddr, config: &Config) -> Result<(), String> {
+    if bind.ip().is_loopback() || config.api_token.is_some() {
+        return Ok(());
+    }
+    Err(format!(
+        "refusing to listen on {bind}: it is not a loopback address and MSGKIT_API_TOKEN is not set, so anyone who \
+         can reach the port could read and drain the event queue. Set MSGKIT_API_TOKEN to a long random value (for \
+         example `openssl rand -hex 32`), or bind to 127.0.0.1"
+    ))
+}
+
+/// The host part of a `Host` header value or an allowed-hosts entry: no port, no trailing dot, lower case.
+fn host_without_port(value: &str) -> &str {
+    let value = value.trim();
+    let host = if let Some(rest) = value.strip_prefix('[') {
+        // `[::1]:8080` or `[::1]`: keep the brackets, drop the port.
+        rest.find(']').map_or(value, |end| &value[..end + 2])
+    } else if value.matches(':').count() == 1 {
+        value.split(':').next().unwrap_or(value)
+    } else {
+        value
+    };
+    host.trim_end_matches('.')
+}
+
+/// Whether `host` (already lower case, no port) is the machine itself: `localhost`, `*.localhost` or a loopback
+/// address.
+fn is_loopback_host(host: &str) -> bool {
+    if host == "localhost" || host.ends_with(".localhost") {
+        return true;
+    }
+    host.trim_start_matches('[').trim_end_matches(']').parse::<IpAddr>().is_ok_and(|ip| ip.is_loopback())
+}
+
+/// DNS rebinding defence for a service without an API token: a web page can make a visitor's browser call
+/// `http://localhost:8080` under an attacker's host name, and every `/v1/*` route would answer it. Browsers always
+/// send the host name they used, so only the machine's own names (and `Config::allowed_hosts`) are accepted. A
+/// request without a `Host` header cannot come from a browser and is let through. With an API token set the check
+/// is skipped: a page cannot know the token.
+async fn require_allowed_host(State(state): State<AppState>, req: Request, next: Next) -> Response {
+    if state.config.api_token.is_some() {
+        return next.run(req).await;
+    }
+    let host = req
+        .headers()
+        .get(header::HOST)
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_owned)
+        .or_else(|| req.uri().authority().map(|a| a.as_str().to_owned()));
+    if let Some(host) = host {
+        let host = host_without_port(&host.to_ascii_lowercase()).to_owned();
+        if !is_loopback_host(&host) && !state.config.allowed_hosts.contains(&host) {
+            // The rejected host is not repeated: it is attacker-chosen text.
+            return ApiError::new(
+                StatusCode::FORBIDDEN,
+                "the Host header is not allowed (set MSGKIT_ALLOWED_HOSTS, or MSGKIT_API_TOKEN)",
+                codes::HOST_NOT_ALLOWED,
+            )
+            .into_response();
+        }
+    }
+    next.run(req).await
 }
 
 type SharedStore = Arc<Mutex<Box<dyn EventStore + Send>>>;
@@ -564,7 +678,8 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/events", get(events))
         .route("/v1/events/ack", post(acknowledge))
         .route("/v1/version", get(version))
-        .layer(middleware::from_fn_with_state(state.clone(), require_token));
+        .layer(middleware::from_fn_with_state(state.clone(), require_token))
+        .layer(middleware::from_fn_with_state(state.clone(), require_allowed_host));
 
     let webhooks = Router::new()
         .route("/webhooks/whatsapp", get(whatsapp_verify).post(whatsapp_receive))
@@ -649,5 +764,60 @@ mod tests {
     fn a_zero_limit_in_a_config_is_refused_at_startup() {
         let zero = Config::default().with_limits(Limits::default().with_max_messages(0));
         assert!(AppState::new(zero).is_err());
+    }
+
+    #[test]
+    fn the_host_part_drops_the_port_and_a_trailing_dot() {
+        for (value, host) in [
+            ("localhost", "localhost"),
+            ("localhost:8080", "localhost"),
+            ("example.com.", "example.com"),
+            ("example.com.:443", "example.com"),
+            ("127.0.0.1:80", "127.0.0.1"),
+            ("[::1]", "[::1]"),
+            ("[::1]:8080", "[::1]"),
+            ("::1", "::1"),
+            (" example.com ", "example.com"),
+        ] {
+            assert_eq!(host_without_port(value), host, "{value}");
+        }
+    }
+
+    #[test]
+    fn loopback_hosts_are_the_machines_own_names_only() {
+        for host in ["localhost", "a.localhost", "127.0.0.1", "127.9.9.9", "[::1]", "::1"] {
+            assert!(is_loopback_host(host), "{host}");
+        }
+        for host in [
+            "notlocalhost",
+            "localhost.evil.example",
+            "127.0.0.1.evil.example",
+            "10.0.0.1",
+            "0.0.0.0",
+            "[::]",
+            "example.com",
+            "",
+        ] {
+            assert!(!is_loopback_host(host), "{host}");
+        }
+    }
+
+    #[test]
+    fn allowed_hosts_are_read_trimmed_lower_cased_and_without_ports() {
+        let hosts = allowed_hosts_from(&env(&[(
+            "MSGKIT_ALLOWED_HOSTS",
+            " Msgkit.Example.com , 10.0.0.7:8080,,[::1] ",
+        )]))
+        .unwrap();
+        assert_eq!(hosts, ["msgkit.example.com", "10.0.0.7", "[::1]"]);
+        assert_eq!(allowed_hosts_from(&env(&[])).unwrap(), Vec::<String>::new());
+        assert_eq!(allowed_hosts_from(&env(&[("MSGKIT_ALLOWED_HOSTS", "")])).unwrap(), Vec::<String>::new());
+        let with_at_sign = format!("user{}a.example", '@');
+        for bad in
+            ["https://a.example", "*.a.example", "a.example/x", "a b", "a.example?x=1", with_at_sign.as_str()]
+        {
+            let e = allowed_hosts_from(&env(&[("MSGKIT_ALLOWED_HOSTS", bad)])).unwrap_err();
+            assert!(!e.contains(bad), "{e}");
+        }
     }
 }

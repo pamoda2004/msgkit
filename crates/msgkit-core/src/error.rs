@@ -65,6 +65,8 @@ pub mod codes {
     pub const VERIFICATION_FAILED: &str = "verification_failed";
     /// HTTP: the webhook is not configured on this service.
     pub const NOT_CONFIGURED: &str = "not_configured";
+    /// HTTP: a request to `/v1/*` of a service without an API token whose `Host` header is not allowed.
+    pub const HOST_NOT_ALLOWED: &str = "host_not_allowed";
 
     /// Every code, in documentation order.
     pub const ALL: &[&str] = &[
@@ -78,6 +80,7 @@ pub mod codes {
         SIGNATURE_INVALID,
         VERIFICATION_FAILED,
         NOT_CONFIGURED,
+        HOST_NOT_ALLOWED,
     ];
 }
 

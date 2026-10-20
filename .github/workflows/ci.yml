@@ -104,6 +104,11 @@ jobs:
       - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
         with:
           tool: cargo-llvm-cov
+      # tests/purity.rs inspects the dependency graph of the whole workspace with `cargo tree --offline`. This job builds
+      # only msgkit-core, so without this step the other crates' dependencies were downloaded only when the cache
+      # happened to hold them, and the test failed (a flake) whenever it did not.
+      - name: Download every dependency of the workspace
+        run: cargo fetch --locked
       - name: Measure
         run: |
           cargo llvm-cov -p msgkit-core --locked --no-report

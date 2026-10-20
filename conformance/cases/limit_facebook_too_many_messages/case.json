@@ -1,0 +1,33 @@
+{
+  "op": "parse_facebook_export",
+  "input": {
+    "thread": {
+      "participants": [
+        {
+          "name": "Alice"
+        },
+        {
+          "name": "Bob"
+        }
+      ],
+      "messages": [
+        {
+          "sender_name": "Alice",
+          "timestamp_ms": 1700000000000,
+          "content": "one"
+        },
+        {
+          "sender_name": "Bob",
+          "timestamp_ms": 1700000001000,
+          "content": "two"
+        }
+      ]
+    },
+    "options": {
+      "limits": {
+        "max_messages": 1
+      }
+    }
+  },
+  "note": "Two messages with max_messages 1"
+}

@@ -27,6 +27,23 @@ Import operations return `data = {"events": [Event...], "warnings": [string...]}
 
 Option schemas are in [`schema/options.schema.json`](../schema/options.schema.json). Omitted options use defaults.
 
+## Input limits
+
+Every import checks its input against a `limits` object before it does the expensive work, and fails with the error code `limit_exceeded` when a limit is passed. Nothing is truncated: a partial import would look like a complete one. `limits` is an option of `parse_whatsapp_export`, `parse_facebook_export` and `normalize_device`, and a top-level field next to `payload` for the two webhook operations.
+
+| Limit | Default | What it bounds |
+|---|---|---|
+| `max_input_bytes` | 33554432 (32 MiB) | the exported text (WhatsApp), or the whole JSON document (the other imports; through the JSON entry point that is the whole request) |
+| `max_line_bytes` | 262144 (256 KiB) | the longest line of a WhatsApp export |
+| `max_messages` | 1000000 | messages, calls and notices in one import (SMS rows plus call rows for a device batch) |
+| `max_json_depth` | 32 | nesting of JSON arrays and objects in the document handed to msgkit (the request wrapper counts through the JSON entry point; over HTTP the body is the document) |
+
+An absent limit (or `null`) has its default; name only the limits you want to change, each as a number of **at least 1**. **`0` is refused with `invalid_input`**: it reads as "allow nothing", so it must never switch protection off. The one explicit way to switch every limit off is `"unlimited": true` (Rust `Limits::unlimited()`, Python `limits={"unlimited": True}`, Node.js `{ unlimited: true }`, Kotlin `Limits(unlimited = true)`, command line `--no-limits`, service `MSGKIT_NO_LIMITS=true`); to merely raise one limit, give a larger number. Real exports are far below the defaults (WhatsApp itself stops an export at 40,000 messages without media, about 4 MB). Raise a limit or switch them off only for input you trust.
+
+Where the limit is checked: the JSON entry point parses the request first (a cheap pass), then checks size and depth before the importer runs, so the 8 to 37 times amplification of parsing is not paid for an oversized input. A caller who must cap memory before parsing should cap the buffer it hands over; the HTTP service and the WebAssembly module do (below). Rust callers can use the `Limits` type (`msgkit_core::limits`) and the `with_limits` setters; the infallible `whatsapp_export::parse` and `device::normalize` return no events and one warning when over a limit, and `try_parse` and `try_normalize` return the error.
+
+The HTTP service takes its limits **from the operator only** (`MSGKIT_MAX_*`, `MSGKIT_NO_LIMITS`); a request cannot change them: a `limits` query parameter is refused with `invalid_input`, and any `limits` or `options` inside a JSON body, loose `max_*` query parameters and headers are ignored. A bad value (0, text) stops the service at startup, naming the variable. The command line has the flags `--max-input-bytes`, `--max-line-bytes`, `--max-messages`, `--max-json-depth` (each at least 1, applied per file) and `--no-limits`. If your application forwards options from its own users into msgkit, strip `limits` first: the JSON entry point trusts its caller.
+
 > `verify_signature` answers `{"valid": false}` for a mismatch instead of returning an error; see [ERRORS.md](ERRORS.md#why-verify_signature-returns-valid-false-and-not-an-error).
 
 > `normalize_*_webhook` does **not** verify the signature. Call `verify_signature` over the raw request body first, or use the HTTP sidecar, which always does.
@@ -63,7 +80,7 @@ The Node, Python and Kotlin packages expose the operations above as idiomatic fu
 
 ### WebAssembly ABI
 
-For hosts that want to drive the WebAssembly module directly (the Node package is the reference): the module has **no imports** and exports `memory`, `msgkit_alloc(len)`, `msgkit_dealloc(ptr, len)`, `msgkit_call(op_ptr, op_len, in_ptr, in_len) -> ptr`, `msgkit_last_len()` and `msgkit_version()`. Copy UTF-8 inputs into memory obtained from `msgkit_alloc`, call, read `msgkit_last_len()` bytes at the returned pointer, then free the result and both inputs. The module is single-threaded. See [`crates/msgkit-wasm/src/lib.rs`](../crates/msgkit-wasm/src/lib.rs).
+For hosts that want to drive the WebAssembly module directly (the Node package is the reference): the module has **no imports** and exports `memory`, `msgkit_alloc(len)`, `msgkit_dealloc(ptr, len)`, `msgkit_call(op_ptr, op_len, in_ptr, in_len) -> ptr`, `msgkit_last_len()` and `msgkit_version()`. Copy UTF-8 inputs into memory obtained from `msgkit_alloc`, call, read `msgkit_last_len()` bytes at the returned pointer, then free the result and both inputs. The module is single-threaded. It tracks every buffer it hands out: `msgkit_dealloc` ignores its length argument and any pointer that is not a live buffer (so a wrong length or a repeated free cannot corrupt memory), `msgkit_call` answers `invalid_input` for a range that is not inside a live buffer, and `msgkit_alloc` returns 0 for a request over 512 MiB. See [`crates/msgkit-wasm/src/lib.rs`](../crates/msgkit-wasm/src/lib.rs).
 
 ## HTTP sidecar
 
@@ -91,6 +108,11 @@ Configuration (environment):
 | `MSGKIT_WHATSAPP_VERIFY_TOKEN` | handshake token | unset → handshake rejected |
 | `MSGKIT_MESSENGER_APP_SECRET` / `_VERIFY_TOKEN` | same for Messenger | unset |
 | `MSGKIT_DB_PATH` | SQLite file for webhook events | unset → in memory, **lost on restart** |
+| `MSGKIT_MAX_INPUT_BYTES` | largest request body for the imports (webhooks: the lower of this and 2 MiB); a whole number of at least 1 | 33554432 (32 MiB) |
+| `MSGKIT_MAX_LINE_BYTES` | longest WhatsApp export line; at least 1 | 262144 |
+| `MSGKIT_MAX_MESSAGES` | most messages, calls and notices per import; at least 1 | 1000000 |
+| `MSGKIT_MAX_JSON_DEPTH` | deepest JSON nesting; at least 1 | 32 |
+| `MSGKIT_NO_LIMITS` | `true` switches every input limit off (a warning is logged at startup) | unset (limits on) |
 | `RUST_LOG` | log level | `info` |
 
 ### Webhook event storage

@@ -27,7 +27,7 @@ class MsgkitTest {
     @Test
     fun `versions agree with the Rust workspace`() {
         val info = Msgkit.version()
-        assertEquals("1.1.0", info.schemaVersion)
+        assertEquals("1.2.0", info.schemaVersion)
         assertEquals(System.getProperty("msgkit.workspaceVersion"), info.crateVersion)
         assertTrue("parse_whatsapp_export" in info.operations)
         assertTrue(info.tzdataVersion.matches(Regex("""\d{4}[a-z]""")), info.tzdataVersion)
@@ -191,6 +191,38 @@ class MsgkitTest {
         assertTrue(!Msgkit.verifySignature("wrong", body, sig))
         assertTrue(!Msgkit.verifySignature("app-secret", "$body ", sig))
         assertTrue(!Msgkit.verifySignature("app-secret", body, "sha256=zz"))
+    }
+
+    @Test
+    fun `limits are applied and reported as limit_exceeded`() {
+        val text = "01/02/2024, 10:00 - Alice: hello\n01/02/2024, 10:01 - Bob: hi\n"
+        val e =
+            assertFailsWith<MsgkitException> {
+                Msgkit.parseWhatsAppExport(text, WhatsAppExportOptions(limits = Limits(maxMessages = 1)))
+            }
+        assertEquals("limit_exceeded", e.code)
+        assertTrue(!e.message.orEmpty().contains("hello"))
+        // Only `unlimited` switches the limits off; 0 is refused and never means "no limit".
+        assertEquals(
+            2,
+            Msgkit
+                .parseWhatsAppExport(
+                    text,
+                    WhatsAppExportOptions(limits = Limits(maxMessages = 1, unlimited = true)),
+                ).events.size,
+        )
+        assertEquals(
+            "invalid_input",
+            assertFailsWith<MsgkitException> {
+                Msgkit.parseWhatsAppExport(text, WhatsAppExportOptions(limits = Limits(maxMessages = 0)))
+            }.code,
+        )
+        assertEquals(
+            "limit_exceeded",
+            assertFailsWith<MsgkitException> {
+                Msgkit.normalizeMessengerWebhook("""{"object":"page","entry":[[[[]]]]}""", Limits(maxJsonDepth = 3))
+            }.code,
+        )
     }
 
     @Test

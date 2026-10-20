@@ -26,7 +26,7 @@ def calls(report: Any) -> List[Any]:
 class VersionTests(unittest.TestCase):
     def test_versions_agree(self) -> None:
         info = msgkit.version()
-        self.assertEqual(info["schema_version"], "1.1.0")
+        self.assertEqual(info["schema_version"], "1.2.0")
         self.assertEqual(info["crate_version"], msgkit.__version__)
         self.assertEqual(msgkit.native_version(), msgkit.__version__)
 
@@ -65,6 +65,32 @@ class WhatsAppExportTests(unittest.TestCase):
             msgkit.parse_whatsapp_export("01/02/2024, 10:00 - A: x\n", time_zone="Mars/Phobos")
         self.assertEqual(caught.exception.code, "invalid_input")
         self.assertNotIn("Phobos", str(caught.exception))
+
+    def test_limits_are_applied_and_reported_as_limit_exceeded(self) -> None:
+        text = "01/02/2024, 10:00 - Alice: hello\n01/02/2024, 10:01 - Bob: hi\n"
+        with self.assertRaises(msgkit.MsgkitError) as caught:
+            msgkit.parse_whatsapp_export(text, limits={"max_messages": 1})
+        self.assertEqual(caught.exception.code, "limit_exceeded")
+        self.assertNotIn("hello", str(caught.exception))
+        # Only `unlimited` switches the limits off; 0 is refused and never means "no limit".
+        self.assertEqual(
+            len(msgkit.parse_whatsapp_export(text, limits={"unlimited": True, "max_messages": 1})["events"]), 2
+        )
+        with self.assertRaises(msgkit.MsgkitError) as zero:
+            msgkit.parse_whatsapp_export(text, limits={"max_messages": 0})
+        self.assertEqual(zero.exception.code, "invalid_input")
+        self.assertNotIn("hello", str(zero.exception))
+        with self.assertRaises(msgkit.MsgkitError) as deep:
+            msgkit.normalize_whatsapp_webhook(
+                {"object": "whatsapp_business_account", "entry": [[[[]]]]}, limits={"max_json_depth": 3}
+            )
+        self.assertEqual(deep.exception.code, "limit_exceeded")
+        with self.assertRaises(msgkit.MsgkitError) as rows:
+            msgkit.normalize_device(
+                {"sms": [], "calls": [{"number": "+94700000000", "date_ms": 1, "type": 1}] * 2},
+                limits={"max_messages": 1},
+            )
+        self.assertEqual(rows.exception.code, "limit_exceeded")
 
     def test_explicit_date_order(self) -> None:
         text = "03/04/2024, 10:00 - A: x\n"

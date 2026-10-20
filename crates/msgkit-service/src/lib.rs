@@ -29,6 +29,7 @@ use axum::{Json, Router};
 use msgkit_core::device::{self, DeviceBatch, DeviceOptions};
 use msgkit_core::error::codes;
 use msgkit_core::facebook::{self, FacebookExportOptions};
+use msgkit_core::limits::Limits;
 use msgkit_core::store::{EventStore, MemoryStore};
 use msgkit_core::whatsapp_export::{self, WhatsAppExportOptions};
 use msgkit_core::{webhook, Event, ImportReport, SCHEMA_VERSION};
@@ -37,10 +38,13 @@ use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-/// Largest accepted import body (WhatsApp exports of busy chats are big).
-const IMPORT_LIMIT_BYTES: usize = 64 * 1024 * 1024;
-/// Webhook bodies from Meta are small; anything bigger is rejected.
+/// Webhook bodies from Meta are small; anything bigger is rejected (or less, when `max_input_bytes` is lower).
 const WEBHOOK_LIMIT_BYTES: usize = 2 * 1024 * 1024;
+
+/// A byte limit as an axum body limit: no limit is the largest value.
+fn body_limit(bytes: Option<u64>) -> usize {
+    bytes.map_or(usize::MAX, |b| usize::try_from(b).unwrap_or(usize::MAX))
+}
 
 #[derive(Clone, Default)]
 pub struct WebhookConfig {
@@ -57,7 +61,12 @@ impl fmt::Debug for WebhookConfig {
     }
 }
 
+/// The service's settings.
+///
+/// `#[non_exhaustive]`, so a setting can be added without breaking callers: start from [`Default`] (or
+/// [`Config::from_env`]) and chain the `with_*` setters.
 #[derive(Clone, Default, Debug)]
+#[non_exhaustive]
 pub struct Config {
     pub whatsapp: Option<WebhookConfig>,
     pub messenger: Option<WebhookConfig>,
@@ -66,11 +75,94 @@ pub struct Config {
     /// SQLite file for webhook events. When unset, events are kept in memory
     /// and lost on restart.
     pub db_path: Option<PathBuf>,
+    /// Input limits for every import and webhook. Set by the operator only: a request cannot raise them. The
+    /// default is [`Limits::default`] (32 MiB bodies); the body of an import is capped at `max_input_bytes`.
+    pub limits: Limits,
+}
+
+/// Reads one `MSGKIT_MAX_*` value: a whole number of at least 1. Unset or empty keeps the default (`None`).
+/// `0` is refused, so a limit is never switched off by accident; `MSGKIT_NO_LIMITS=true` does that explicitly.
+fn limit_var(get: &dyn Fn(&str) -> Option<String>, name: &str) -> Result<Option<u64>, String> {
+    let Some(raw) = get(name).filter(|v| !v.is_empty()) else { return Ok(None) };
+    match raw.trim().parse::<u64>() {
+        Ok(n) if n >= 1 => Ok(Some(n)),
+        _ => Err(format!("{name} must be a whole number of at least 1")),
+    }
+}
+
+/// `MSGKIT_NO_LIMITS`: `true` or `1` switches every limit off, `false`, `0` or empty leaves them on.
+fn no_limits(get: &dyn Fn(&str) -> Option<String>) -> Result<bool, String> {
+    match get("MSGKIT_NO_LIMITS").map(|v| v.trim().to_ascii_lowercase()).as_deref() {
+        None | Some("" | "false" | "0") => Ok(false),
+        Some("true" | "1") => Ok(true),
+        Some(_) => Err("MSGKIT_NO_LIMITS must be `true` or `false`".to_owned()),
+    }
+}
+
+/// The limits an operator configured through `MSGKIT_MAX_*` and `MSGKIT_NO_LIMITS`, read with `get` (the
+/// environment, or a stub in tests). Unset values keep the library defaults.
+fn limits_from(get: &dyn Fn(&str) -> Option<String>) -> Result<Limits, String> {
+    let mut limits = Limits::default();
+    limits.max_input_bytes = limit_var(get, "MSGKIT_MAX_INPUT_BYTES")?;
+    limits.max_line_bytes = limit_var(get, "MSGKIT_MAX_LINE_BYTES")?;
+    limits.max_messages = limit_var(get, "MSGKIT_MAX_MESSAGES")?;
+    limits.max_json_depth = limit_var(get, "MSGKIT_MAX_JSON_DEPTH")?;
+    if no_limits(get)? {
+        limits = Limits::unlimited();
+    }
+    Ok(limits)
 }
 
 impl Config {
+    /// Like [`Config::from_env`], but reports a bad `MSGKIT_MAX_*` value instead of ignoring it. The error
+    /// names the variable, never its value.
+    ///
+    /// # Errors
+    /// A message when `MSGKIT_MAX_INPUT_BYTES`, `MSGKIT_MAX_LINE_BYTES`, `MSGKIT_MAX_MESSAGES` or
+    /// `MSGKIT_MAX_JSON_DEPTH` is not a whole number of at least 1, or `MSGKIT_NO_LIMITS` is not `true` or `false`.
+    pub fn try_from_env() -> Result<Self, String> {
+        let limits = limits_from(&|name| std::env::var(name).ok())?;
+        Ok(Self::from_env().with_limits(limits))
+    }
+
+    /// Sets [`whatsapp`](Self::whatsapp).
+    #[must_use]
+    pub fn with_whatsapp(mut self, webhook: WebhookConfig) -> Self {
+        self.whatsapp = Some(webhook);
+        self
+    }
+
+    /// Sets [`messenger`](Self::messenger).
+    #[must_use]
+    pub fn with_messenger(mut self, webhook: WebhookConfig) -> Self {
+        self.messenger = Some(webhook);
+        self
+    }
+
+    /// Sets [`api_token`](Self::api_token).
+    #[must_use]
+    pub fn with_api_token(mut self, token: impl Into<String>) -> Self {
+        self.api_token = Some(token.into());
+        self
+    }
+
+    /// Sets [`db_path`](Self::db_path).
+    #[must_use]
+    pub fn with_db_path(mut self, path: impl Into<PathBuf>) -> Self {
+        self.db_path = Some(path.into());
+        self
+    }
+
+    /// Sets [`limits`](Self::limits).
+    #[must_use]
+    pub fn with_limits(mut self, limits: Limits) -> Self {
+        self.limits = limits;
+        self
+    }
+
     /// Reads configuration from `MSGKIT_*` environment variables. Empty values
-    /// count as unset.
+    /// count as unset. The `MSGKIT_MAX_*` limits are read by [`Config::try_from_env`]; here they keep their
+    /// defaults.
     pub fn from_env() -> Self {
         fn var(name: &str) -> Option<String> {
             std::env::var(name).ok().filter(|v| !v.is_empty())
@@ -86,6 +178,7 @@ impl Config {
             messenger: webhook("MESSENGER"),
             api_token: var("MSGKIT_API_TOKEN"),
             db_path: var("MSGKIT_DB_PATH").map(PathBuf::from),
+            limits: Limits::default(),
         }
     }
 }
@@ -109,6 +202,7 @@ impl AppState {
     /// set (and forgetting acknowledged ids older than the retention window),
     /// otherwise using an in-memory store.
     pub fn new(config: Config) -> msgkit_core::Result<Self> {
+        config.limits.validate()?;
         let store: Box<dyn EventStore + Send> = match &config.db_path {
             Some(path) => {
                 let mut db = SqliteStore::open(path)?;
@@ -171,7 +265,12 @@ impl IntoResponse for ApiError {
 
 /// A request msgkit's core refused: the core's own error code (`invalid_input` or `parse_error`).
 fn core_error(e: &msgkit_core::Error) -> ApiError {
-    ApiError::new(StatusCode::BAD_REQUEST, e.to_string(), e.code())
+    let status = if e.code() == codes::LIMIT_EXCEEDED {
+        StatusCode::PAYLOAD_TOO_LARGE
+    } else {
+        StatusCode::BAD_REQUEST
+    };
+    ApiError::new(status, e.to_string(), e.code())
 }
 
 /// A request whose body or query could not be used (`invalid_input`), or was too large (`limit_exceeded`).
@@ -292,26 +391,33 @@ async fn version() -> Json<Value> {
 }
 
 async fn import_whatsapp(
-    AppQuery(opts): AppQuery<WhatsAppExportOptions>,
+    State(state): State<AppState>,
+    AppQuery(mut opts): AppQuery<WhatsAppExportOptions>,
     body: String,
 ) -> Result<Json<ImportReport>, ApiError> {
+    opts.limits = state.config.limits.clone();
     let report = blocking(move || whatsapp_export::try_parse(&body, &opts)).await?;
     report.map(Json).map_err(|e| core_error(&e))
 }
 
 async fn import_facebook(
-    AppQuery(opts): AppQuery<FacebookExportOptions>,
+    State(state): State<AppState>,
+    AppQuery(mut opts): AppQuery<FacebookExportOptions>,
     AppJson(thread): AppJson<Value>,
 ) -> Result<Json<ImportReport>, ApiError> {
+    opts.limits = state.config.limits.clone();
     let report = blocking(move || facebook::parse_value(thread, &opts)).await?;
     report.map(Json).map_err(|e| core_error(&e))
 }
 
 async fn import_device(
-    AppQuery(opts): AppQuery<DeviceOptions>,
+    State(state): State<AppState>,
+    AppQuery(mut opts): AppQuery<DeviceOptions>,
     AppJson(batch): AppJson<DeviceBatch>,
 ) -> Result<Json<ImportReport>, ApiError> {
-    Ok(Json(blocking(move || device::normalize(&batch, &opts)).await?))
+    opts.limits = state.config.limits.clone();
+    let report = blocking(move || device::try_normalize(&batch, &opts)).await?;
+    report.map(Json).map_err(|e| core_error(&e))
 }
 
 #[derive(Deserialize)]
@@ -376,7 +482,7 @@ async fn receive_webhook(
     cfg: Option<&WebhookConfig>,
     headers: &HeaderMap,
     body: &Bytes,
-    normalize: fn(&Value) -> msgkit_core::Result<ImportReport>,
+    normalize: fn(&Value, &Limits) -> msgkit_core::Result<ImportReport>,
 ) -> Response {
     // Refuse to process anything unauthenticated, even when unconfigured.
     let Some(cfg) = cfg else {
@@ -403,7 +509,7 @@ async fn receive_webhook(
             .into_response()
         }
     };
-    let report = match normalize(&payload) {
+    let report = match normalize(&payload, &state.config.limits) {
         Ok(r) => r,
         Err(e) => return core_error(&e).into_response(),
     };
@@ -429,7 +535,8 @@ async fn whatsapp_verify(State(s): State<AppState>, AppQuery(q): AppQuery<Verify
 }
 
 async fn whatsapp_receive(State(s): State<AppState>, headers: HeaderMap, body: Bytes) -> Response {
-    receive_webhook(&s, s.config.whatsapp.as_ref(), &headers, &body, webhook::normalize_whatsapp).await
+    receive_webhook(&s, s.config.whatsapp.as_ref(), &headers, &body, webhook::normalize_whatsapp_with_limits)
+        .await
 }
 
 async fn messenger_verify(State(s): State<AppState>, AppQuery(q): AppQuery<VerifyQuery>) -> Response {
@@ -437,20 +544,23 @@ async fn messenger_verify(State(s): State<AppState>, AppQuery(q): AppQuery<Verif
 }
 
 async fn messenger_receive(State(s): State<AppState>, headers: HeaderMap, body: Bytes) -> Response {
-    receive_webhook(&s, s.config.messenger.as_ref(), &headers, &body, webhook::normalize_messenger).await
+    receive_webhook(
+        &s,
+        s.config.messenger.as_ref(),
+        &headers,
+        &body,
+        webhook::normalize_messenger_with_limits,
+    )
+    .await
 }
 
 pub fn router(state: AppState) -> Router {
+    let import_limit = body_limit(state.config.limits.input_bytes_limit());
+    let webhook_limit = import_limit.min(WEBHOOK_LIMIT_BYTES);
     let v1 = Router::new()
-        .route(
-            "/v1/import/whatsapp-export",
-            post(import_whatsapp).layer(DefaultBodyLimit::max(IMPORT_LIMIT_BYTES)),
-        )
-        .route(
-            "/v1/import/facebook-export",
-            post(import_facebook).layer(DefaultBodyLimit::max(IMPORT_LIMIT_BYTES)),
-        )
-        .route("/v1/import/device", post(import_device).layer(DefaultBodyLimit::max(IMPORT_LIMIT_BYTES)))
+        .route("/v1/import/whatsapp-export", post(import_whatsapp).layer(DefaultBodyLimit::max(import_limit)))
+        .route("/v1/import/facebook-export", post(import_facebook).layer(DefaultBodyLimit::max(import_limit)))
+        .route("/v1/import/device", post(import_device).layer(DefaultBodyLimit::max(import_limit)))
         .route("/v1/events", get(events))
         .route("/v1/events/ack", post(acknowledge))
         .route("/v1/version", get(version))
@@ -459,7 +569,7 @@ pub fn router(state: AppState) -> Router {
     let webhooks = Router::new()
         .route("/webhooks/whatsapp", get(whatsapp_verify).post(whatsapp_receive))
         .route("/webhooks/messenger", get(messenger_verify).post(messenger_receive))
-        .layer(DefaultBodyLimit::max(WEBHOOK_LIMIT_BYTES));
+        .layer(DefaultBodyLimit::max(webhook_limit));
 
     Router::new()
         .route("/healthz", get(|| async { "ok" }))
@@ -467,4 +577,77 @@ pub fn router(state: AppState) -> Router {
         .merge(webhooks)
         .layer(middleware::map_response(json_payload_too_large))
         .with_state(state)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn env<'a>(pairs: &'a [(&'a str, &'a str)]) -> impl Fn(&str) -> Option<String> + 'a {
+        move |name| pairs.iter().find(|(k, _)| *k == name).map(|(_, v)| (*v).to_owned())
+    }
+
+    #[test]
+    fn unset_variables_keep_the_library_defaults() {
+        assert_eq!(limits_from(&env(&[])).unwrap(), Limits::default());
+        assert_eq!(limits_from(&env(&[("MSGKIT_MAX_MESSAGES", "")])).unwrap(), Limits::default());
+        assert_eq!(limits_from(&env(&[("MSGKIT_NO_LIMITS", "")])).unwrap(), Limits::default());
+    }
+
+    #[test]
+    fn numbers_are_read_per_limit() {
+        let l = limits_from(&env(&[
+            ("MSGKIT_MAX_INPUT_BYTES", "1048576"),
+            ("MSGKIT_MAX_LINE_BYTES", " 4096 "),
+            ("MSGKIT_MAX_MESSAGES", "7"),
+            ("MSGKIT_MAX_JSON_DEPTH", "9"),
+        ]))
+        .unwrap();
+        assert_eq!(
+            (l.max_input_bytes, l.max_line_bytes, l.max_messages, l.max_json_depth),
+            (Some(1_048_576), Some(4096), Some(7), Some(9))
+        );
+        assert!(!l.unlimited);
+    }
+
+    #[test]
+    fn zero_off_and_bad_values_are_refused_by_name_without_echoing_them() {
+        for (name, value) in [
+            ("MSGKIT_MAX_MESSAGES", "0"),
+            ("MSGKIT_MAX_MESSAGES", "off"),
+            ("MSGKIT_MAX_MESSAGES", "lots-of-secret-text"),
+            ("MSGKIT_MAX_INPUT_BYTES", "-1"),
+            ("MSGKIT_MAX_JSON_DEPTH", "1.5"),
+            ("MSGKIT_MAX_LINE_BYTES", "0"),
+        ] {
+            let e = limits_from(&env(&[(name, value)])).unwrap_err();
+            assert_eq!(e, format!("{name} must be a whole number of at least 1"));
+        }
+    }
+
+    #[test]
+    fn no_limits_is_the_explicit_opt_out() {
+        for value in ["true", "TRUE", "1", " true "] {
+            assert!(limits_from(&env(&[("MSGKIT_NO_LIMITS", value)])).unwrap().unlimited, "{value}");
+        }
+        for value in ["false", "0"] {
+            assert!(!limits_from(&env(&[("MSGKIT_NO_LIMITS", value)])).unwrap().unlimited, "{value}");
+        }
+        assert_eq!(
+            limits_from(&env(&[("MSGKIT_NO_LIMITS", "maybe-secret")])).unwrap_err(),
+            "MSGKIT_NO_LIMITS must be `true` or `false`"
+        );
+    }
+
+    #[test]
+    fn no_limit_is_the_largest_body() {
+        assert_eq!(body_limit(None), usize::MAX);
+        assert_eq!(body_limit(Some(1024)), 1024);
+    }
+
+    #[test]
+    fn a_zero_limit_in_a_config_is_refused_at_startup() {
+        let zero = Config::default().with_limits(Limits::default().with_max_messages(0));
+        assert!(AppState::new(zero).is_err());
+    }
 }

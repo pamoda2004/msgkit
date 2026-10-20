@@ -11,6 +11,7 @@ use std::process::ExitCode;
 use clap::{Parser, Subcommand, ValueEnum};
 use msgkit_core::device::{self, DeviceBatch, DeviceOptions};
 use msgkit_core::facebook::{self, FacebookExportOptions};
+use msgkit_core::limits::Limits;
 use msgkit_core::store::write_ndjson;
 use msgkit_core::whatsapp_export::{self, DateOrder, WhatsAppExportOptions};
 use msgkit_core::{ImportReport, SCHEMA_VERSION};
@@ -21,6 +22,26 @@ struct Cli {
     /// Exit with an error if the import produced any warnings.
     #[arg(long, global = true)]
     fail_on_warnings: bool,
+
+    /// Largest accepted input in bytes (default 33554432, 32 MiB; at least 1). Applies to each file.
+    #[arg(long, global = true, value_parser = clap::value_parser!(u64).range(1..))]
+    max_input_bytes: Option<u64>,
+
+    /// Longest accepted line of a WhatsApp export in bytes (default 262144; at least 1).
+    #[arg(long, global = true, value_parser = clap::value_parser!(u64).range(1..))]
+    max_line_bytes: Option<u64>,
+
+    /// Most messages, calls and notices accepted per file (default 1000000; at least 1).
+    #[arg(long, global = true, value_parser = clap::value_parser!(u64).range(1..))]
+    max_messages: Option<u64>,
+
+    /// Deepest accepted JSON nesting (default 32; at least 1).
+    #[arg(long, global = true, value_parser = clap::value_parser!(u64).range(1..))]
+    max_json_depth: Option<u64>,
+
+    /// Switch every input limit off. Only for files you trust: parsing can use many times the file size in memory.
+    #[arg(long, global = true)]
+    no_limits: bool,
 
     #[command(subcommand)]
     command: Command,
@@ -94,7 +115,21 @@ fn read_input(path: &Path) -> io::Result<String> {
     }
 }
 
+/// The limits the flags ask for; flags that are not given keep the defaults.
+fn limits_of(cli: &Cli) -> Limits {
+    if cli.no_limits {
+        return Limits::unlimited();
+    }
+    let mut limits = Limits::default();
+    limits.max_input_bytes = cli.max_input_bytes;
+    limits.max_line_bytes = cli.max_line_bytes;
+    limits.max_messages = cli.max_messages;
+    limits.max_json_depth = cli.max_json_depth;
+    limits
+}
+
 fn run(cli: Cli) -> Result<ImportReport, String> {
+    let limits = limits_of(&cli);
     let read = |p: &Path| read_input(p).map_err(|e| format!("cannot read {}: {e}", p.display()));
     match cli.command {
         Command::WhatsappExport {
@@ -113,11 +148,13 @@ fn run(cli: Cli) -> Result<ImportReport, String> {
             opts.conversation_id = conversation_id;
             opts.default_country_code = default_country_code;
             opts.time_zone = time_zone;
+            opts.limits = limits;
             whatsapp_export::try_parse(&read(&file)?, &opts).map_err(|e| e.to_string())
         }
         Command::FacebookExport { files, self_name } => {
             let mut opts = FacebookExportOptions::default();
             opts.self_name = self_name;
+            opts.limits = limits;
             let mut merged = ImportReport::default();
             for f in files {
                 let r = facebook::parse(&read(&f)?, &opts).map_err(|e| format!("{}: {e}", f.display()))?;
@@ -133,7 +170,8 @@ fn run(cli: Cli) -> Result<ImportReport, String> {
             let mut opts = DeviceOptions::default();
             opts.own_number = own_number;
             opts.default_country_code = default_country_code;
-            Ok(device::normalize(&batch, &opts))
+            opts.limits = limits;
+            device::try_normalize(&batch, &opts).map_err(|e| e.to_string())
         }
         Command::Version => unreachable!("handled in main"),
     }

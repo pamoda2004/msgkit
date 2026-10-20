@@ -1,0 +1,13 @@
+{
+  "op": "parse_whatsapp_export",
+  "input": {
+    "text": "01/02/2024, 10:00 - Alice: hello\n01/02/2024, 10:01 - Bob: hi\n",
+    "options": {
+      "limits": {
+        "max_messages": 2,
+        "max_line_bytes": 32
+      }
+    }
+  },
+  "note": "A limit equal to the input is accepted (the longest line is exactly 32 bytes, and there are exactly 2 messages)"
+}

@@ -23,6 +23,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
 use crate::id::{derive_id, Ordinals};
+use crate::limits::Limits;
 use crate::model::{
     Attachment, AttachmentKind, Call, CallOutcome, Channel, Direction, Event, ImportReport, Message,
     Participant,
@@ -91,6 +92,9 @@ pub struct WhatsAppExportOptions {
     /// time in a repeated hour uses the first occurrence and a time in a skipped hour moves forward by the gap
     /// (reported in one warning). The zone database is bundled with msgkit, so results are the same everywhere.
     pub time_zone: Option<String>,
+    /// Upper bounds for this import. The defaults suit real exports. Over a limit the import fails with
+    /// `limit_exceeded` and nothing is imported.
+    pub limits: Limits,
 }
 
 struct Header {
@@ -205,6 +209,13 @@ impl WhatsAppExportOptions {
     #[must_use]
     pub fn with_time_zone(mut self, zone: impl Into<String>) -> Self {
         self.time_zone = Some(zone.into());
+        self
+    }
+
+    /// Sets [`limits`](Self::limits).
+    #[must_use]
+    pub fn with_limits(mut self, limits: Limits) -> Self {
+        self.limits = limits;
         self
     }
 }
@@ -382,25 +393,42 @@ fn candidate_is_notice(candidate: &str) -> bool {
 }
 
 /// Parses the contents of a WhatsApp chat export.
+///
+/// Infallible: when the input is over a limit in `opts.limits`, the report has no events and one warning that
+/// names the limit. Use [`try_parse`] to get `limit_exceeded` as an error instead.
 #[must_use]
 pub fn parse(text: &str, opts: &WhatsAppExportOptions) -> ImportReport {
+    parse_checked(text, opts).unwrap_or_else(|e| {
+        let mut report = ImportReport::default();
+        report.warnings.push(format!("nothing was imported: {e}"));
+        report
+    })
+}
+
+fn parse_checked(text: &str, opts: &WhatsAppExportOptions) -> Result<ImportReport> {
+    opts.limits.validate()?;
+    opts.limits.check_input_bytes(text.len())?;
     let mut report = ImportReport::default();
     let [android, ios] = header_regexes();
 
     let mut entries: Vec<Entry> = Vec::new();
     let mut orphan_lines = 0usize;
-    for raw in text.lines() {
+    for (index, raw) in text.lines().enumerate() {
+        opts.limits.check_line_bytes(index + 1, raw.len())?;
         let line = clean_line(raw);
         let caps = android.captures(&line).or_else(|| ios.captures(&line));
         match caps {
-            Some(c) => entries.push(Entry {
-                header: Header {
-                    date: c[1].to_owned(),
-                    time: c[2].to_owned(),
-                    ampm: c.get(3).map(|m| m.as_str().to_owned()),
-                },
-                text: c[4].to_owned(),
-            }),
+            Some(c) => {
+                entries.push(Entry {
+                    header: Header {
+                        date: c[1].to_owned(),
+                        time: c[2].to_owned(),
+                        ampm: c.get(3).map(|m| m.as_str().to_owned()),
+                    },
+                    text: c[4].to_owned(),
+                });
+                opts.limits.check_messages(entries.len())?;
+            }
             None => match entries.last_mut() {
                 // A line without a header continues the previous message.
                 Some(last) => {
@@ -417,7 +445,7 @@ pub fn parse(text: &str, opts: &WhatsAppExportOptions) -> ImportReport {
     }
     if entries.is_empty() {
         report.warnings.push("no WhatsApp messages found; is this a chat export?".into());
-        return report;
+        return Ok(report);
     }
 
     let order = resolve_order(&entries, opts.date_order, &mut report.warnings);
@@ -434,7 +462,7 @@ pub fn parse(text: &str, opts: &WhatsAppExportOptions) -> ImportReport {
         }
         None => Clock::Fixed(offset),
     };
-    build_events(entries, opts, order, &clock, report)
+    Ok(build_events(entries, opts, order, &clock, report))
 }
 
 /// Like [`parse`], but refuses an unknown `time_zone` with [`Error::InvalidInput`] instead of falling back to
@@ -450,7 +478,7 @@ pub fn try_parse(text: &str, opts: &WhatsAppExportOptions) -> Result<ImportRepor
             ));
         }
     }
-    Ok(parse(text, opts))
+    parse_checked(text, opts)
 }
 
 fn build_events(

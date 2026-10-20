@@ -1,0 +1,12 @@
+{
+  "op": "parse_whatsapp_export",
+  "input": {
+    "text": "01/02/2024, 10:00 - Alice: hello\n01/02/2024, 10:01 - Bob: hi\n",
+    "options": {
+      "limits": {
+        "max_messages": 0
+      }
+    }
+  },
+  "note": "0 is refused as invalid_input; it never means no limit, and the error does not quote the input"
+}

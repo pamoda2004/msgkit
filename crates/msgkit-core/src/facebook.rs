@@ -16,6 +16,7 @@ use serde_json::Value;
 
 use crate::error::{Error, Result};
 use crate::id::{derive_id, Ordinals};
+use crate::limits::Limits;
 use crate::model::{
     Attachment, AttachmentKind, Call, CallOutcome, Channel, Direction, Event, ImportReport, Message,
     Participant,
@@ -41,6 +42,9 @@ pub struct FacebookExportOptions {
     pub self_name: Option<String>,
     /// Overrides the conversation id (defaults to the export's `thread_path`).
     pub conversation_id: Option<String>,
+    /// Upper bounds for this import. The defaults suit real exports. Over a limit the import fails with
+    /// `limit_exceeded` and nothing is imported.
+    pub limits: Limits,
 }
 
 impl FacebookExportOptions {
@@ -55,6 +59,13 @@ impl FacebookExportOptions {
     #[must_use]
     pub fn with_conversation_id(mut self, id: impl Into<String>) -> Self {
         self.conversation_id = Some(id.into());
+        self
+    }
+
+    /// Sets [`limits`](Self::limits).
+    #[must_use]
+    pub fn with_limits(mut self, limits: Limits) -> Self {
+        self.limits = limits;
         self
     }
 }
@@ -126,24 +137,38 @@ pub fn fix_encoding(s: &str) -> String {
 }
 
 /// Parses one `message_N.json` file.
+///
+/// # Errors
+/// [`Error::Parse`] when the text is not a Messenger export; [`Error::LimitExceeded`] when it is over `opts.limits`.
 pub fn parse(json: &str, opts: &FacebookExportOptions) -> Result<ImportReport> {
+    opts.limits.validate()?;
+    opts.limits.check_input_bytes(json.len())?;
+    opts.limits.check_json_depth_str(json)?;
     let thread: Thread = serde_json::from_str(json).map_err(|e| {
         Error::Parse(format!(
             "not a Facebook messages export: {}",
             crate::error::describe_json_error(&e, true)
         ))
     })?;
+    opts.limits.check_messages(thread.messages.len())?;
     Ok(build(thread, opts))
 }
 
-/// Like [`parse`], for callers that already hold a JSON value.
+/// Like [`parse`], for callers that already hold a JSON value. The input size is not known here, so
+/// `max_input_bytes` is not checked; the depth and the message count are.
+///
+/// # Errors
+/// [`Error::Parse`] when the value is not a Messenger export; [`Error::LimitExceeded`] when it is over `opts.limits`.
 pub fn parse_value(value: Value, opts: &FacebookExportOptions) -> Result<ImportReport> {
+    opts.limits.validate()?;
+    opts.limits.check_json_depth_value(&value)?;
     let thread: Thread = serde_json::from_value(value).map_err(|e| {
         Error::Parse(format!(
             "not a Facebook messages export: {}",
             crate::error::describe_json_error(&e, false)
         ))
     })?;
+    opts.limits.check_messages(thread.messages.len())?;
     Ok(build(thread, opts))
 }
 

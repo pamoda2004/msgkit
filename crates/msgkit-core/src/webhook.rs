@@ -16,6 +16,7 @@ use sha2::Sha256;
 
 use crate::error::{Error, Result};
 use crate::id::derive_id;
+use crate::limits::Limits;
 use crate::model::{
     Attachment, AttachmentKind, Channel, Direction, Event, ImportReport, Message, Participant,
 };
@@ -74,6 +75,17 @@ fn kind_from_str(s: &str) -> AttachmentKind {
 /// Messages are inbound: they were sent to the business number. Status updates
 /// are ignored.
 pub fn normalize_whatsapp(payload: &Value) -> Result<ImportReport> {
+    normalize_whatsapp_with_limits(payload, &Limits::default())
+}
+
+/// Like [`normalize_whatsapp`], with the given limits: the nesting depth of `payload` and the number of
+/// events it yields are checked (the byte size of an already parsed value is not known here).
+///
+/// # Errors
+/// [`Error::Parse`] for a payload of another platform; [`Error::LimitExceeded`] when over `limits`.
+pub fn normalize_whatsapp_with_limits(payload: &Value, limits: &Limits) -> Result<ImportReport> {
+    limits.validate()?;
+    limits.check_json_depth_value(payload)?;
     if str_at(payload, &["object"]) != Some("whatsapp_business_account") {
         return Err(Error::Parse(
             "not a WhatsApp Business webhook (object != whatsapp_business_account)".into(),
@@ -152,6 +164,7 @@ pub fn normalize_whatsapp(payload: &Value) -> Result<ImportReport> {
             }
         }
     }
+    limits.check_messages(report.events.len())?;
     report.sort();
     Ok(report)
 }
@@ -160,6 +173,17 @@ pub fn normalize_whatsapp(payload: &Value) -> Result<ImportReport> {
 ///
 /// Echoes of messages the page itself sent are marked outbound.
 pub fn normalize_messenger(payload: &Value) -> Result<ImportReport> {
+    normalize_messenger_with_limits(payload, &Limits::default())
+}
+
+/// Like [`normalize_messenger`], with the given limits: the nesting depth of `payload` and the number of
+/// events it yields are checked (the byte size of an already parsed value is not known here).
+///
+/// # Errors
+/// [`Error::Parse`] for a payload of another platform; [`Error::LimitExceeded`] when over `limits`.
+pub fn normalize_messenger_with_limits(payload: &Value, limits: &Limits) -> Result<ImportReport> {
+    limits.validate()?;
+    limits.check_json_depth_value(payload)?;
     if str_at(payload, &["object"]) != Some("page") {
         return Err(Error::Parse("not a Messenger webhook (object != page)".into()));
     }
@@ -211,6 +235,7 @@ pub fn normalize_messenger(payload: &Value) -> Result<ImportReport> {
             }));
         }
     }
+    limits.check_messages(report.events.len())?;
     report.sort();
     Ok(report)
 }

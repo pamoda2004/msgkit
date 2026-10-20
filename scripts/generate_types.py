@@ -458,6 +458,8 @@ def kt_default(td: TypeDef, p: Prop, types: dict[str, TypeDef]) -> str | None:
         return lenient
     if p.has_default:
         value = p.default
+        if value is None:
+            return "null"
         if p.ty.kind == "array":
             return "emptyList()"
         if p.ty.kind == "bool":
@@ -466,6 +468,8 @@ def kt_default(td: TypeDef, p: Prop, types: dict[str, TypeDef]) -> str | None:
             return str(value)
         if p.ty.kind == "ref" and isinstance(value, str):
             return f"{p.ty.arg}.{value.upper()}"
+        if p.ty.kind == "ref" and isinstance(value, dict):
+            return f"{p.ty.arg}()"  # a struct whose own properties all have defaults
         if value is None:
             return "null"
     if not p.required and (p.nullable or p.ty.kind == "any" or td.output):

@@ -14,12 +14,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
         .init();
 
-    let config = Config::from_env();
+    let config = Config::try_from_env()?;
     let bind: SocketAddr =
         std::env::var("MSGKIT_BIND").unwrap_or_else(|_| "127.0.0.1:8080".into()).parse()?;
 
     if !bind.ip().is_loopback() && config.api_token.is_none() {
         warn!("listening on a non-loopback address without MSGKIT_API_TOKEN: /v1/* is unauthenticated");
+    }
+    if config.limits.unlimited {
+        warn!("MSGKIT_NO_LIMITS is set: input limits are switched off, so a single request can use unbounded memory");
     }
     if config.db_path.is_none() {
         warn!("MSGKIT_DB_PATH is not set: webhook events are kept in memory and lost on restart");

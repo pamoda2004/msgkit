@@ -1,0 +1,29 @@
+{
+  "op": "normalize_device",
+  "input": {
+    "batch": {
+      "sms": [
+        {
+          "address": "+94700000000",
+          "body": "a",
+          "date_ms": 1700000000000,
+          "type": 1
+        }
+      ],
+      "calls": [
+        {
+          "number": "+94700000000",
+          "date_ms": 1700000001000,
+          "duration_secs": 5,
+          "type": 1
+        }
+      ]
+    },
+    "options": {
+      "limits": {
+        "max_messages": 1
+      }
+    }
+  },
+  "note": "One SMS row plus one call row with max_messages 1"
+}

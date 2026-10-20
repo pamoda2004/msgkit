@@ -16,6 +16,7 @@ use serde_json::{json, Value};
 use crate::device::{self, DeviceBatch, DeviceOptions};
 use crate::error::{Error, Result};
 use crate::facebook::{self, FacebookExportOptions};
+use crate::limits::Limits;
 use crate::model::ImportReport;
 use crate::webhook;
 use crate::whatsapp_export::{self, WhatsAppExportOptions};
@@ -56,6 +57,8 @@ struct DeviceInput {
 #[derive(Deserialize)]
 struct WebhookInput {
     payload: Value,
+    #[serde(default)]
+    limits: Limits,
 }
 
 #[derive(Deserialize)]
@@ -83,19 +86,32 @@ fn run(op: &str, input: &str) -> Result<Value> {
         }
         "parse_facebook_export" => {
             let i: FacebookExportInput = serde_json::from_str(input)?;
+            // The whole request is the document handed to msgkit: its size and depth are what is limited.
+            i.options.limits.validate()?;
+            i.options.limits.check_input_bytes(input.len())?;
+            i.options.limits.check_json_depth_str(input)?;
             report_json(facebook::parse_value(i.thread, &i.options)?)
         }
         "normalize_device" => {
             let i: DeviceInput = serde_json::from_str(input)?;
-            report_json(device::normalize(&i.batch, &i.options))
+            i.options.limits.validate()?;
+            i.options.limits.check_input_bytes(input.len())?;
+            i.options.limits.check_json_depth_str(input)?;
+            report_json(device::try_normalize(&i.batch, &i.options)?)
         }
         "normalize_whatsapp_webhook" => {
             let i: WebhookInput = serde_json::from_str(input)?;
-            report_json(webhook::normalize_whatsapp(&i.payload)?)
+            i.limits.validate()?;
+            i.limits.check_input_bytes(input.len())?;
+            i.limits.check_json_depth_str(input)?;
+            report_json(webhook::normalize_whatsapp_with_limits(&i.payload, &i.limits)?)
         }
         "normalize_messenger_webhook" => {
             let i: WebhookInput = serde_json::from_str(input)?;
-            report_json(webhook::normalize_messenger(&i.payload)?)
+            i.limits.validate()?;
+            i.limits.check_input_bytes(input.len())?;
+            i.limits.check_json_depth_str(input)?;
+            report_json(webhook::normalize_messenger_with_limits(&i.payload, &i.limits)?)
         }
         "verify_signature" => {
             let i: SignatureInput = serde_json::from_str(input)?;

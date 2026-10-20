@@ -30,7 +30,7 @@ class MsgkitAndroidTest {
         val pageSize = Os.sysconf(OsConstants._SC_PAGESIZE)
         Log.i("msgkit", "device page size = $pageSize bytes")
         val info = Msgkit.version()
-        assertEquals("1.1.0", info.schemaVersion)
+        assertEquals("1.2.0", info.schemaVersion)
         assertTrue(info.operations.contains("parse_whatsapp_export"))
     }
 

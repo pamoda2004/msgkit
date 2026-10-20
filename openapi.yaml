@@ -203,7 +203,7 @@ components:
       description: Error
       content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
     PayloadTooLarge:
-      description: The request body is larger than the service accepts (code `limit_exceeded`)
+      description: The request is over a limit (code `limit_exceeded`). The body is larger than the service's cap (32 MiB for imports by default, 2 MiB for webhooks; `MSGKIT_MAX_INPUT_BYTES`), or the input has more messages than `MSGKIT_MAX_MESSAGES`, a longer line than `MSGKIT_MAX_LINE_BYTES` or deeper JSON than `MSGKIT_MAX_JSON_DEPTH`. Only the operator sets these; a request cannot raise them.
       content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
   schemas:
     Error:

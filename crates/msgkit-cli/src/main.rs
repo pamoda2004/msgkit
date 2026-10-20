@@ -12,9 +12,10 @@ use clap::{Parser, Subcommand, ValueEnum};
 use msgkit_core::device::{self, DeviceBatch, DeviceOptions};
 use msgkit_core::facebook::{self, FacebookExportOptions};
 use msgkit_core::limits::Limits;
-use msgkit_core::store::write_ndjson;
+use msgkit_core::store::{write_ndjson, EraseOptions, EraseStore};
 use msgkit_core::whatsapp_export::{self, DateOrder, WhatsAppExportOptions};
 use msgkit_core::{ImportReport, SCHEMA_VERSION};
+use msgkit_store_sqlite::SqliteStore;
 
 #[derive(Parser)]
 #[command(name = "msgkit", version, about = "Convert message exports to normalized NDJSON")]
@@ -101,8 +102,71 @@ enum Command {
         #[arg(long)]
         default_country_code: Option<String>,
     },
+    /// Maintain a msgkit SQLite database (see `msgkit store --help`).
+    Store {
+        #[command(subcommand)]
+        action: StoreAction,
+    },
     /// Print version information.
     Version,
+}
+
+#[derive(Subcommand)]
+enum StoreAction {
+    /// Erase every held (not yet acknowledged) event that involves one person. Prints only a count.
+    ///
+    /// The address is matched the way imports normalise it: phone numbers in any spelling match when
+    /// --default-country-code is the one used at import. Pass the address with --address-stdin to keep it out of
+    /// the shell history and the process list.
+    Erase {
+        /// The database file (a local path, never a cloud-synced folder).
+        db: PathBuf,
+        /// The person's phone number, email address or id.
+        #[arg(long, conflicts_with = "address_stdin")]
+        address: Option<String>,
+        /// Read the address from the first line of standard input.
+        #[arg(long)]
+        address_stdin: bool,
+        /// Calling code, e.g. 94, the one the events were imported with.
+        #[arg(long)]
+        default_country_code: Option<String>,
+        /// Also forget the ids of the erased events (a redelivered message would then be accepted again).
+        #[arg(long)]
+        drop_ids: bool,
+        /// Rebuild the database file afterwards (VACUUM) so no free pages remain.
+        #[arg(long)]
+        compact: bool,
+    },
+}
+
+/// Runs a `store` action. Returns the line to print; errors never include the address.
+fn run_store(action: StoreAction) -> Result<String, String> {
+    match action {
+        StoreAction::Erase { db, address, address_stdin, default_country_code, drop_ids, compact } => {
+            let address = match (address, address_stdin) {
+                (Some(a), false) => a,
+                (None, true) => {
+                    let mut line = String::new();
+                    io::stdin().read_line(&mut line).map_err(|e| format!("cannot read the address: {e}"))?;
+                    line
+                }
+                _ => return Err("give the person with --address or --address-stdin".to_owned()),
+            };
+            if !db.exists() {
+                return Err(format!("{} does not exist", db.display()));
+            }
+            let mut opts = EraseOptions::default().with_drop_ids(drop_ids);
+            if let Some(code) = default_country_code {
+                opts = opts.with_default_country_code(code);
+            }
+            let mut store = SqliteStore::open(&db).map_err(|e| e.to_string())?;
+            let erased = store.erase_person(&address, &opts).map_err(|e| e.to_string())?;
+            if compact {
+                store.compact().map_err(|e| e.to_string())?;
+            }
+            Ok(format!("erased {erased} event(s)"))
+        }
+    }
 }
 
 fn read_input(path: &Path) -> io::Result<String> {
@@ -173,7 +237,7 @@ fn run(cli: Cli) -> Result<ImportReport, String> {
             opts.limits = limits;
             device::try_normalize(&batch, &opts).map_err(|e| e.to_string())
         }
-        Command::Version => unreachable!("handled in main"),
+        Command::Store { .. } | Command::Version => unreachable!("handled in main"),
     }
 }
 
@@ -182,6 +246,18 @@ fn main() -> ExitCode {
     if matches!(cli.command, Command::Version) {
         println!("msgkit {} (schema {SCHEMA_VERSION})", env!("CARGO_PKG_VERSION"));
         return ExitCode::SUCCESS;
+    }
+    if let Command::Store { action } = cli.command {
+        return match run_store(action) {
+            Ok(line) => {
+                println!("{line}");
+                ExitCode::SUCCESS
+            }
+            Err(e) => {
+                eprintln!("error: {e}");
+                ExitCode::FAILURE
+            }
+        };
     }
     let strict = cli.fail_on_warnings;
 

@@ -701,7 +701,9 @@ version = "0.2.0"
 dependencies = [
  "clap",
  "msgkit-core",
+ "msgkit-store-sqlite",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]
@@ -754,6 +756,7 @@ dependencies = [
  "http-body-util",
  "msgkit-core",
  "msgkit-store-sqlite",
+ "rusqlite",
  "serde",
  "serde_json",
  "sha2",

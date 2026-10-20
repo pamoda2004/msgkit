@@ -1,11 +1,12 @@
 use std::net::SocketAddr;
 use std::time::Duration;
 
-use msgkit_service::{check_bind, prune_database, router, AppState, Config};
+use msgkit_service::{check_bind, maintain_database, router, AppState, Config, Maintenance};
 use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 
-/// How often acknowledged event ids past the retention window are forgotten.
+/// How often retention runs: held events past `MSGKIT_PENDING_MAX_AGE_DAYS` are erased and acknowledged event ids
+/// past the retention window are forgotten.
 const PRUNE_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
 
 #[tokio::main]
@@ -35,15 +36,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     if let Some(path) = config.db_path.clone() {
+        let config = config.clone();
         tokio::spawn(async move {
             let mut tick = tokio::time::interval(PRUNE_INTERVAL);
             tick.tick().await; // the first tick fires immediately; startup already pruned
             loop {
                 tick.tick().await;
-                let path = path.clone();
-                match tokio::task::spawn_blocking(move || prune_database(&path)).await {
-                    Ok(Ok(0)) => {}
-                    Ok(Ok(n)) => info!("forgot {n} acknowledged event id(s) past retention"),
+                let (path, config) = (path.clone(), config.clone());
+                match tokio::task::spawn_blocking(move || maintain_database(&path, &config)).await {
+                    Ok(Ok(Maintenance { expired: 0, forgotten: 0 })) => {}
+                    Ok(Ok(Maintenance { expired, forgotten })) => {
+                        info!("retention: erased {expired} uncollected event(s), forgot {forgotten} event id(s)");
+                    }
                     Ok(Err(e)) => error!("database maintenance failed: {e}"),
                     Err(e) => error!("database maintenance task failed: {e}"),
                 }

@@ -54,6 +54,7 @@ The `normalize_*_webhook` operations do not verify signatures; verify first.
 | `phone::normalize_phone` | Unstable | Deliberately minimal; the rules may widen. |
 | `id::derive_id` | Unstable | The function may change; the ids it produces are stable (see above). |
 | `error::describe_json_error` | Unstable | Internal helper that keeps error text free of input. |
+| `store::{EraseStore, RetentionStore, EraseOptions, address_key, erase_key, involves}` | Unstable until a release has used them |
 | `store::conformance` | Unstable | A test harness for `EventStore` implementers; its checks may grow. |
 
 `cargo-semver-checks` runs in CI against the tagged prototype (`baseline-prototype`) until the first release exists, then against the previous release.
@@ -63,6 +64,7 @@ The `normalize_*_webhook` operations do not verify signatures; verify first.
 | Item | Level |
 |---|---|
 | `SqliteStore::{open, open_in_memory, prune_acknowledged}` and its `EventStore` implementation | Stable |
+| `SqliteStore::{open_with, open_in_memory_with, checkpoint, compact}`, `StoreOptions`, and the `EraseStore` and `RetentionStore` implementations | Unstable until a release has used them |
 | `DEFAULT_RETENTION` | Stable |
 | Database file layout | Unstable: do not read or write the file yourself. |
 

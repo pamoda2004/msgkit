@@ -20,30 +20,57 @@
 //!   its content immediately and keeps only its id, so the database does not
 //!   become a permanent copy of personal messages. The id is remembered to
 //!   reject redelivered webhooks until [`SqliteStore::prune_acknowledged`]
-//!   removes it.
+//!   removes it. SQLite's `secure_delete` is on by default (see
+//!   [`StoreOptions`]), so the freed space is overwritten with zeros rather
+//!   than left holding the old text.
+//! * **Deletion and retention** ([`EraseStore`], [`RetentionStore`]). `erase_person` removes the
+//!   content of every held event that involves one person (any spelling of a
+//!   phone number matches), `expire_pending` removes events nobody collected,
+//!   and `prune_acknowledged` forgets old ids. After a deletion the write-ahead
+//!   log is checkpointed and truncated; [`SqliteStore::compact`] also runs
+//!   `VACUUM`.
+//! * **Ids are personal data too.** An id is derived from the sender and the
+//!   text (webhook ids from the platform's message id). It holds no readable
+//!   content, but anyone who can guess the content can confirm it, so it is
+//!   pseudonymous personal data. An acknowledged or erased event keeps its id
+//!   for [`DEFAULT_RETENTION`] (30 days) after the moment it was acknowledged
+//!   or erased, so redelivered webhooks are still recognised, and is then
+//!   removed by `prune_acknowledged`. The service runs that at start-up and
+//!   every six hours; a library user must call it.
 //! * **Multi-process safe.** Several processes may open the same file; writers
 //!   wait up to five seconds for each other.
 //! * **Not encrypted.** Content is stored as plain JSON. Use full-disk
 //!   encryption or an encrypted volume, and restrict file access (the file is
 //!   created owner-only on Unix).
+//! * **Keep it out of cloud-synced folders.** A production database must not
+//!   live in `OneDrive`, Google Drive, Dropbox or any similar synced folder:
+//!   those copy the file, its `-wal` file and every earlier version to other
+//!   machines and to the provider, where msgkit cannot erase them and a
+//!   half-synced WAL can corrupt the database. Use a local, non-synced path.
+//! * **What erasure cannot reach.** Deletion covers this database file and its
+//!   write-ahead log. It cannot recall backups, snapshots, copies made by the
+//!   operating system or a sync client, or bytes a flash drive's wear levelling
+//!   keeps (use an encrypted volume for that).
 
 use std::fmt::Display;
 use std::path::Path;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use msgkit_core::store::EventStore;
+use msgkit_core::store::{erase_key, involves, EraseOptions, EraseStore, EventStore, RetentionStore};
 use msgkit_core::{Error, Event, Result};
 use rusqlite::{params, Connection, TransactionBehavior};
 
 /// Version of the on-disk layout, kept in `PRAGMA user_version`.
-const SCHEMA_VERSION: i64 = 1;
+///
+/// 1: the first layout. 2: adds `received_at`, the second an event was inserted, for `expire_pending`.
+/// A database at version 1 is upgraded in place when opened; an older msgkit refuses a version 2 database.
+const SCHEMA_VERSION: i64 = 2;
 
 /// Suggested retention for acknowledged ids. Meta retries failed webhook
 /// deliveries for several days, so keep ids at least that long.
 pub const DEFAULT_RETENTION: Duration = Duration::from_secs(30 * 24 * 60 * 60);
 
 const SCHEMA_SQL: &str = "
-    BEGIN IMMEDIATE;
     CREATE TABLE IF NOT EXISTS events (
         seq          INTEGER PRIMARY KEY AUTOINCREMENT,
         id           TEXT    NOT NULL UNIQUE,
@@ -51,15 +78,87 @@ const SCHEMA_SQL: &str = "
         channel      TEXT    NOT NULL,
         kind         TEXT    NOT NULL,
         json         TEXT,
-        acked_at     INTEGER
+        acked_at     INTEGER,
+        received_at  INTEGER
     );
     CREATE INDEX IF NOT EXISTS events_pending ON events(seq) WHERE acked_at IS NULL;
-    CREATE INDEX IF NOT EXISTS events_acked ON events(acked_at) WHERE acked_at IS NOT NULL;
-    PRAGMA user_version = 1;
-    COMMIT;";
+    CREATE INDEX IF NOT EXISTS events_acked ON events(acked_at) WHERE acked_at IS NOT NULL;";
+
+/// Layout 1 to 2. Events already held get `received_at` = now, the earliest moment this store can vouch for.
+const MIGRATE_1_TO_2_SQL: &str = "ALTER TABLE events ADD COLUMN received_at INTEGER;";
+
+/// Options for opening a [`SqliteStore`].
+///
+/// `#[non_exhaustive]`: start from [`StoreOptions::default`] and use the `with_*` setters.
+///
+/// ```
+/// use msgkit_store_sqlite::StoreOptions;
+///
+/// assert!(StoreOptions::default().secure_delete);
+/// assert!(!StoreOptions::default().with_secure_delete(false).secure_delete);
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct StoreOptions {
+    /// Overwrite deleted content with zeros (SQLite `secure_delete = ON`). On by default; it makes deletes and
+    /// updates a little slower. The setting belongs to this connection: another process that opens the same file
+    /// without it, such as an older msgkit, does not overwrite.
+    pub secure_delete: bool,
+}
+
+impl Default for StoreOptions {
+    fn default() -> Self {
+        StoreOptions { secure_delete: true }
+    }
+}
+
+impl StoreOptions {
+    /// Sets [`secure_delete`](Self::secure_delete).
+    #[must_use]
+    pub fn with_secure_delete(mut self, on: bool) -> Self {
+        self.secure_delete = on;
+        self
+    }
+}
 
 fn storage(e: impl Display) -> Error {
     Error::Storage(e.to_string())
+}
+
+fn user_version(conn: &Connection) -> Result<i64> {
+    conn.pragma_query_value(None, "user_version", |r| r.get(0)).map_err(storage)
+}
+
+/// Creates or upgrades the layout inside one write transaction. The version is read again inside it, so two
+/// processes opening an old database at once upgrade it only once.
+fn migrate(conn: &Connection) -> Result<()> {
+    conn.execute_batch("BEGIN IMMEDIATE").map_err(storage)?;
+    let result = (|| -> Result<()> {
+        let version = user_version(conn)?;
+        if version >= SCHEMA_VERSION {
+            return Ok(());
+        }
+        if version == 0 {
+            conn.execute_batch(SCHEMA_SQL).map_err(storage)?;
+        } else {
+            conn.execute_batch(MIGRATE_1_TO_2_SQL).map_err(storage)?;
+            conn.execute("UPDATE events SET received_at = ?1 WHERE received_at IS NULL", params![now_secs()])
+                .map_err(storage)?;
+        }
+        conn.pragma_update(None, "user_version", SCHEMA_VERSION).map_err(storage)
+    })();
+    match result {
+        Ok(()) => conn.execute_batch("COMMIT").map_err(storage),
+        Err(e) => {
+            let _ = conn.execute_batch("ROLLBACK");
+            Err(e)
+        }
+    }
+}
+
+/// The moment `older_than` ago, in seconds: things dated before it are "older than" the window.
+fn cutoff_secs(older_than: Duration) -> i64 {
+    now_secs().saturating_sub(i64::try_from(older_than.as_secs()).unwrap_or(i64::MAX))
 }
 
 fn now_secs() -> i64 {
@@ -72,8 +171,13 @@ pub struct SqliteStore {
 }
 
 impl SqliteStore {
-    /// Opens (creating if needed) the database at `path`.
+    /// Opens (creating if needed) the database at `path` with the default [`StoreOptions`].
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
+        Self::open_with(path, &StoreOptions::default())
+    }
+
+    /// Opens (creating if needed) the database at `path`.
+    pub fn open_with(path: impl AsRef<Path>, options: &StoreOptions) -> Result<Self> {
         let path = path.as_ref();
         let is_new = !path.exists();
         let conn =
@@ -81,19 +185,24 @@ impl SqliteStore {
         if is_new {
             restrict_permissions(path);
         }
-        Self::init(conn)
+        Self::init(conn, options)
     }
 
     /// A private in-memory database, mainly for tests.
     pub fn open_in_memory() -> Result<Self> {
-        Self::init(Connection::open_in_memory().map_err(storage)?)
+        Self::open_in_memory_with(&StoreOptions::default())
     }
 
-    fn init(conn: Connection) -> Result<Self> {
+    /// A private in-memory database with the given options.
+    pub fn open_in_memory_with(options: &StoreOptions) -> Result<Self> {
+        Self::init(Connection::open_in_memory().map_err(storage)?, options)
+    }
+
+    fn init(conn: Connection, options: &StoreOptions) -> Result<Self> {
         conn.busy_timeout(Duration::from_secs(5)).map_err(storage)?;
         // Reading user_version first fails fast with "file is not a database"
         // if the path points at something that is not SQLite.
-        let version: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0)).map_err(storage)?;
+        let version = user_version(&conn)?;
         if version > SCHEMA_VERSION {
             return Err(storage(format!(
                 "database layout version {version} is newer than this library supports ({SCHEMA_VERSION}); upgrade msgkit"
@@ -101,10 +210,28 @@ impl SqliteStore {
         }
         conn.pragma_update(None, "journal_mode", "WAL").map_err(storage)?;
         conn.pragma_update(None, "synchronous", "FULL").map_err(storage)?;
+        conn.pragma_update(None, "secure_delete", options.secure_delete).map_err(storage)?;
         if version < SCHEMA_VERSION {
-            conn.execute_batch(SCHEMA_SQL).map_err(storage)?;
+            migrate(&conn)?;
         }
         Ok(SqliteStore { conn })
+    }
+
+    /// Truncates the write-ahead log: its frames, which may still hold the text of deleted events, are folded
+    /// into the database file and the log is emptied. Returns `false` when another connection was reading and the
+    /// log could not be emptied this time (nothing is lost; try again later). Deleting calls this itself.
+    pub fn checkpoint(&self) -> Result<bool> {
+        let busy: i64 =
+            self.conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |r| r.get(0)).map_err(storage)?;
+        Ok(busy == 0)
+    }
+
+    /// Rebuilds the database file (`VACUUM`) so no free pages remain, then truncates the log. This can take a
+    /// while and needs free disk space about the size of the database; it blocks other writers meanwhile.
+    pub fn compact(&self) -> Result<()> {
+        self.conn.execute_batch("VACUUM").map_err(storage)?;
+        self.checkpoint()?;
+        Ok(())
     }
 
     /// Permanently forgets ids acknowledged more than `older_than` ago.
@@ -113,10 +240,23 @@ impl SqliteStore {
     /// keep `older_than` above the platforms' retry window
     /// ([`DEFAULT_RETENTION`]). Returns the number of ids removed.
     pub fn prune_acknowledged(&mut self, older_than: Duration) -> Result<usize> {
-        let cutoff = now_secs().saturating_sub(i64::try_from(older_than.as_secs()).unwrap_or(i64::MAX));
-        self.conn
-            .execute("DELETE FROM events WHERE acked_at IS NOT NULL AND acked_at < ?1", params![cutoff])
-            .map_err(storage)
+        let n = self
+            .conn
+            .execute(
+                "DELETE FROM events WHERE acked_at IS NOT NULL AND acked_at < ?1",
+                params![cutoff_secs(older_than)],
+            )
+            .map_err(storage)?;
+        self.after_delete(n)?;
+        Ok(n)
+    }
+
+    /// Empties the write-ahead log after rows were deleted, so the deleted text does not linger in it.
+    fn after_delete(&self, deleted: usize) -> Result<()> {
+        if deleted > 0 {
+            self.checkpoint()?;
+        }
+        Ok(())
     }
 }
 
@@ -131,7 +271,7 @@ fn restrict_permissions(path: &Path) {
 fn restrict_permissions(_path: &Path) {}
 
 const INSERT_SQL: &str =
-    "INSERT OR IGNORE INTO events (id, timestamp_ms, channel, kind, json) VALUES (?1, ?2, ?3, ?4, ?5)";
+    "INSERT OR IGNORE INTO events (id, timestamp_ms, channel, kind, json, received_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)";
 
 fn insert_row(conn: &Connection, event: &Event) -> Result<bool> {
     let json = serde_json::to_string(event).map_err(storage)?;
@@ -143,7 +283,8 @@ fn insert_row(conn: &Connection, event: &Event) -> Result<bool> {
                 event.timestamp().timestamp_millis(),
                 event.channel().as_str(),
                 event.kind(),
-                json
+                json,
+                now_secs()
             ])
         })
         .map_err(storage)?;
@@ -224,6 +365,59 @@ impl EventStore for SqliteStore {
         }
         tx.commit().map_err(storage)?;
         Ok(acked)
+    }
+}
+
+impl EraseStore for SqliteStore {
+    fn erase_person(&mut self, address: &str, options: &EraseOptions) -> Result<usize> {
+        let key = erase_key(address, options)?;
+        let cc = options.default_country_code.as_deref();
+        let tx = self.conn.transaction_with_behavior(TransactionBehavior::Immediate).map_err(storage)?;
+        let mut matching = Vec::new();
+        {
+            let mut stmt =
+                tx.prepare("SELECT seq, json FROM events WHERE acked_at IS NULL").map_err(storage)?;
+            let rows =
+                stmt.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))).map_err(storage)?;
+            for row in rows {
+                let (seq, json) = row.map_err(storage)?;
+                // A row that cannot be read cannot be matched; fail rather than report an erasure that did not
+                // look at it. The error does not quote the row.
+                if involves(&parse_row(&json)?, &key, cc) {
+                    matching.push(seq);
+                }
+            }
+        }
+        let now = now_secs();
+        for seq in &matching {
+            if options.drop_ids {
+                tx.execute("DELETE FROM events WHERE seq = ?1", params![seq]).map_err(storage)?;
+            } else {
+                tx.execute("UPDATE events SET json = NULL, acked_at = ?1 WHERE seq = ?2", params![now, seq])
+                    .map_err(storage)?;
+            }
+        }
+        tx.commit().map_err(storage)?;
+        self.after_delete(matching.len())?;
+        Ok(matching.len())
+    }
+}
+
+impl RetentionStore for SqliteStore {
+    fn expire_pending(&mut self, older_than: Duration) -> Result<usize> {
+        let n = self
+            .conn
+            .execute(
+                "UPDATE events SET json = NULL, acked_at = ?1 WHERE acked_at IS NULL AND received_at < ?2",
+                params![now_secs(), cutoff_secs(older_than)],
+            )
+            .map_err(storage)?;
+        self.after_delete(n)?;
+        Ok(n)
+    }
+
+    fn prune_acknowledged(&mut self, older_than: Duration) -> Result<usize> {
+        SqliteStore::prune_acknowledged(self, older_than)
     }
 }
 
@@ -357,5 +551,246 @@ mod tests {
         store.insert(sample_event("a", 1)).unwrap();
         store.conn.execute("UPDATE events SET json = '{not json'", []).unwrap();
         assert!(matches!(store.list(), Err(Error::Storage(_))));
+    }
+
+    // ---- deletion and retention -------------------------------------------------------------------------
+
+    use msgkit_core::store::conformance::{event_from, run_erase};
+
+    const MARKER: &str = "zq9x7k2-unique-marker-text";
+
+    /// Everything on disk that belongs to the database: the file, its write-ahead log and shared memory.
+    fn disk_bytes(path: &Path) -> Vec<u8> {
+        let mut all = Vec::new();
+        for suffix in ["", "-wal", "-shm"] {
+            let mut name = path.as_os_str().to_owned();
+            name.push(suffix);
+            if let Ok(bytes) = std::fs::read(Path::new(&name)) {
+                all.extend(bytes);
+            }
+        }
+        all
+    }
+
+    fn contains(haystack: &[u8], needle: &str) -> bool {
+        haystack.windows(needle.len()).any(|w| w == needle.as_bytes())
+    }
+
+    fn event_with_text(id: &str, sender: &str, text: &str) -> Event {
+        let mut event = event_from(id, 1, sender, "+94711111111");
+        if let Event::Message(m) = &mut event {
+            m.body = Some(text.to_owned());
+            m.raw = Some(serde_json::json!({ "text": text }));
+        }
+        event
+    }
+
+    #[test]
+    fn erases_in_memory() {
+        run_erase(|| SqliteStore::open_in_memory().unwrap());
+    }
+
+    #[test]
+    fn erases_on_disk() {
+        let dir = tempfile::tempdir().unwrap();
+        let counter = std::cell::Cell::new(0);
+        run_erase(|| {
+            counter.set(counter.get() + 1);
+            SqliteStore::open(dir.path().join(format!("e{}.db", counter.get()))).unwrap()
+        });
+    }
+
+    #[test]
+    fn erased_text_is_gone_from_the_file_and_the_log() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("msgkit.db");
+        let mut store = SqliteStore::open(&path).unwrap();
+        store
+            .insert_all(vec![
+                event_with_text("gone", "+94700000000", MARKER),
+                event_with_text("kept", "+94722222222", "kept text 8c1d"),
+            ])
+            .unwrap();
+        let before = disk_bytes(&path);
+        assert!(
+            contains(&before, MARKER),
+            "the test must see the text on disk before erasing, or it proves nothing"
+        );
+
+        let opts = EraseOptions::default().with_default_country_code("94");
+        assert_eq!(store.erase_person("0700000000", &opts).unwrap(), 1);
+
+        // Still open, so the log file is still there: nothing of the erased text is in either file.
+        let after = disk_bytes(&path);
+        assert!(!contains(&after, MARKER), "erased text is still on disk");
+        assert!(contains(&after, "kept text 8c1d"), "other events are untouched");
+        assert_eq!(store.len().unwrap(), 1);
+    }
+
+    #[test]
+    fn secure_delete_is_on_by_default_and_can_be_switched_off() {
+        let pragma = |s: &SqliteStore| -> i64 {
+            s.conn.pragma_query_value(None, "secure_delete", |r| r.get(0)).unwrap()
+        };
+        assert_eq!(pragma(&SqliteStore::open_in_memory().unwrap()), 1);
+        let off =
+            SqliteStore::open_in_memory_with(&StoreOptions::default().with_secure_delete(false)).unwrap();
+        assert_eq!(pragma(&off), 0);
+    }
+
+    #[test]
+    fn acknowledged_text_is_gone_from_the_file_too() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("msgkit.db");
+        let mut store = SqliteStore::open(&path).unwrap();
+        store.insert(event_with_text("a", "+94700000000", MARKER)).unwrap();
+        assert!(contains(&disk_bytes(&path), MARKER));
+        store.acknowledge(&["a".to_owned()]).unwrap();
+        store.checkpoint().unwrap();
+        assert!(!contains(&disk_bytes(&path), MARKER), "acknowledged text is still on disk");
+    }
+
+    #[test]
+    fn compact_keeps_the_data() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut store = SqliteStore::open(dir.path().join("msgkit.db")).unwrap();
+        store.insert_all(vec![sample_event("a", 1), sample_event("b", 2)]).unwrap();
+        store.acknowledge(&["a".to_owned()]).unwrap();
+        store.compact().unwrap();
+        assert_eq!(store.list().unwrap(), vec![sample_event("b", 2)]);
+        assert!(!store.insert(sample_event("a", 1)).unwrap());
+    }
+
+    #[test]
+    fn an_erased_id_is_kept_for_the_retention_window_and_then_pruned() {
+        let mut store = SqliteStore::open_in_memory().unwrap();
+        store.insert_all(vec![sample_event("a", 1), sample_event("b", 2)]).unwrap();
+        let opts = EraseOptions::default().with_default_country_code("94");
+        // sample_event's sender is +94700000000.
+        assert_eq!(store.erase_person("070 000 0000", &opts).unwrap(), 2);
+
+        // Kept: nothing but the id and the erase time, and a redelivery is a duplicate.
+        let (json_null, acked_at): (i64, i64) = store
+            .conn
+            .query_row("SELECT COUNT(*) FILTER (WHERE json IS NULL), MAX(acked_at) FROM events", [], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })
+            .unwrap();
+        assert_eq!(json_null, 2);
+        assert!((now_secs() - acked_at).abs() <= 2, "the retention clock starts when the event was erased");
+        assert!(!store.insert(sample_event("a", 1)).unwrap());
+
+        // 29 days after the erasure the id is still kept; 31 days after it is removed.
+        let backdate = |store: &SqliteStore, days: i64| {
+            store
+                .conn
+                .execute("UPDATE events SET acked_at = ?1", params![now_secs() - days * 86_400])
+                .unwrap();
+        };
+        backdate(&store, 29);
+        assert_eq!(store.prune_acknowledged(DEFAULT_RETENTION).unwrap(), 0);
+        backdate(&store, 31);
+        assert_eq!(RetentionStore::prune_acknowledged(&mut store, DEFAULT_RETENTION).unwrap(), 2);
+        assert!(store.insert(sample_event("a", 1)).unwrap(), "a pruned id is forgotten");
+    }
+
+    #[test]
+    fn expire_pending_erases_by_arrival_not_by_event_time() {
+        let mut store = SqliteStore::open_in_memory().unwrap();
+        // The events are dated 1970; they only count as old by when they were inserted.
+        store
+            .insert_all(vec![sample_event("old", 1), sample_event("new", 2), sample_event("acked", 3)])
+            .unwrap();
+        store.acknowledge(&["acked".to_owned()]).unwrap();
+        store
+            .conn
+            .execute("UPDATE events SET received_at = ?1 WHERE id = 'old'", params![now_secs() - 10 * 86_400])
+            .unwrap();
+
+        assert_eq!(store.expire_pending(Duration::from_secs(7 * 86_400)).unwrap(), 1);
+        let ids: Vec<_> = store.list().unwrap().iter().map(|e| e.id().to_owned()).collect();
+        assert_eq!(ids, ["new"]);
+        assert!(!store.insert(sample_event("old", 1)).unwrap(), "the id of an expired event is kept");
+        let content: i64 = store
+            .conn
+            .query_row("SELECT COUNT(*) FROM events WHERE id = 'old' AND json IS NULL", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(content, 1);
+    }
+
+    #[test]
+    fn a_version_1_database_is_upgraded_in_place() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("msgkit.db");
+        {
+            // The layout 0.2.0 wrote before this change.
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE events (
+                    seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE, timestamp_ms INTEGER NOT NULL,
+                    channel TEXT NOT NULL, kind TEXT NOT NULL, json TEXT, acked_at INTEGER);
+                 CREATE INDEX events_pending ON events(seq) WHERE acked_at IS NULL;
+                 CREATE INDEX events_acked ON events(acked_at) WHERE acked_at IS NOT NULL;
+                 PRAGMA user_version = 1;",
+            )
+            .unwrap();
+            let json = serde_json::to_string(&sample_event("held", 1)).unwrap();
+            conn.execute(
+                "INSERT INTO events (id, timestamp_ms, channel, kind, json) VALUES ('held', 1000, 'whatsapp', 'message', ?1)",
+                params![json],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO events (id, timestamp_ms, channel, kind, json, acked_at) VALUES ('done', 2000, 'whatsapp', 'message', NULL, 5)",
+                [],
+            )
+            .unwrap();
+        }
+
+        let mut store = SqliteStore::open(&path).unwrap();
+        assert_eq!(user_version(&store.conn).unwrap(), SCHEMA_VERSION);
+        assert_eq!(store.list().unwrap(), vec![sample_event("held", 1)]);
+        assert!(!store.insert(sample_event("done", 2)).unwrap(), "acknowledged ids survive the upgrade");
+        let stamped: i64 = store
+            .conn
+            .query_row("SELECT COUNT(*) FROM events WHERE id = 'held' AND received_at IS NOT NULL", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(stamped, 1, "rows already held are stamped with the upgrade time");
+
+        // The upgraded database works for the new operations, and a second open changes nothing.
+        let opts = EraseOptions::default().with_default_country_code("94");
+        assert_eq!(store.erase_person("+94700000000", &opts).unwrap(), 1);
+        drop(store);
+        let store = SqliteStore::open(&path).unwrap();
+        assert_eq!(user_version(&store.conn).unwrap(), SCHEMA_VERSION);
+        assert_eq!(store.len().unwrap(), 0);
+    }
+
+    #[test]
+    fn two_processes_opening_an_old_database_upgrade_it_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("msgkit.db");
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE events (
+                    seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE, timestamp_ms INTEGER NOT NULL,
+                    channel TEXT NOT NULL, kind TEXT NOT NULL, json TEXT, acked_at INTEGER);
+                 PRAGMA journal_mode = WAL;
+                 PRAGMA user_version = 1;",
+            )
+            .unwrap();
+        }
+        let handles: Vec<_> = (0..4)
+            .map(|_| {
+                let path = path.clone();
+                std::thread::spawn(move || SqliteStore::open(path).map(|_| ()))
+            })
+            .collect();
+        for h in handles {
+            h.join().unwrap().unwrap();
+        }
     }
 }

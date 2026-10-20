@@ -92,12 +92,13 @@ Endpoints: `/healthz` (no auth); `/v1/*` imports, events, ack, version (bearer t
 | **S** | n/a (a local file) | | n/a |
 | **T** | Another process or user edits the database; corrupt rows. | The file is created owner-only on Unix (`0600`); **on Windows no ACL is set** (the function is a no-op). WAL mode, `synchronous = FULL`, atomic batches. A corrupt row produces `storage_error` without quoting content. No integrity check beyond SQLite's own. | Partly mitigated; **Gap** on Windows permissions |
 | **R** | n/a | | n/a |
-| **I** | Content is stored as **plain JSON**; WAL and shared-memory files sit beside it; backups copy it (F13). Acknowledge sets `json = NULL`, but **`secure_delete` is not enabled and the file is never vacuumed**, so freed pages and the write-ahead log can still hold the old text until they are overwritten or checkpointed. `raw` payloads duplicate content. | Documented as "not encrypted" with advice to use disk encryption. | **Gap (F13)** → PR (d) deletion and retention (including `secure_delete` and checkpointing) and PR (e) encryption at rest (your choice) |
-| **I** | Event ids kept for 30 days after acknowledge reveal that a message existed and allow guess-and-confirm. | Only the id and timestamps are kept; the retention is a fixed constant. | **Gap (F13)** → PR (d) makes it configurable |
+| **I** | Content is stored as **plain JSON**; WAL and shared-memory files sit beside it; backups copy it (F13). Acknowledge sets `json = NULL`. `raw` payloads duplicate content. | `secure_delete` is **on by default**, so deleted content is overwritten with zeros; erase, expire and prune end with `wal_checkpoint(TRUNCATE)` (acknowledge and drain do not, to stay cheap: call `checkpoint()` if the log must be emptied), and `compact()` adds `VACUUM`. Tests read the database file and its `-wal` file and find none of the erased text (`erased_text_is_gone_from_the_file_and_the_log`, `acknowledged_text_is_gone_from_the_file_too`). Documented as "not encrypted" with advice to use disk encryption, and that the database must not live in a cloud-synced folder. Erasure cannot reach backups, snapshots, sync-client copies or flash wear levelling. A second connection without `secure_delete` (an older msgkit) does not overwrite. | Mitigated for the live file; **Gap** for confidentiality at rest → PR (e) encryption at rest (your choice) |
+| **I** | Event ids kept for 30 days after acknowledge reveal that a message existed and allow guess-and-confirm. | Only the id and timestamps are kept. An id is derived from sender and text, so it is **pseudonymous personal data**. It is forgotten 30 days after the event was acknowledged, erased or expired (`DEFAULT_RETENTION`), by `prune_acknowledged`, which the service runs at start-up and every six hours; the window is configurable (`MSGKIT_ID_RETENTION_DAYS`). `erase_person` can drop the ids of the events it erases (`drop_ids`); the ids of events acknowledged earlier cannot be tied to a person and leave only by age. | Mitigated; the window is a trade-off against replay (F14) |
+| **I** | Data about one person has to be deleted on request (F13). | `EraseStore::erase_person` (library) and `msgkit store erase` (command line) erase every held event in which the person is sender, recipient or call participant, matching any spelling of a phone number with the import's `default_country_code`; results are counts. `RetentionStore::expire_pending` / `MSGKIT_PENDING_MAX_AGE_DAYS` erase events nobody collected. Tests: `crates/msgkit-core/src/store.rs` (`run_erase`) and `crates/msgkit-store-sqlite/src/lib.rs`. | Mitigated; an HTTP endpoint follows in its own PR |
 | **D** | Disk full or a huge queue. | Errors become `storage_error` (500), and Meta retries. No cap on stored events. | Accepted; limits in PR (b)/(d) |
 | **E** | SQL injection. | All statements are parameterized; no SQL is built from input. | Mitigated |
 
-There is currently **no way to delete everything about one person** and no configurable retention (F13) → PR (d).
+Deleting one person and configurable retention exist since PR (d). They cover the live database only (see above).
 
 ## Supply chain
 
@@ -114,7 +115,7 @@ There is currently **no way to delete everything about one person** and no confi
 | ~~No limits on file size, line length, message count, nesting depth~~ closed in Phase 4 (b) | F02 | done |
 | ~~WASM `msgkit_dealloc` trusts the caller's length~~ closed in Phase 4 (b); memory still never shrinks inside one instance | F11 | Phase 7 (streaming) |
 | No redaction helper for integrators who must mask identifiers | | Phase 4 (c) |
-| No retention setting or "delete person X"; deleted text may linger in free pages and the WAL | F13 | Phase 4 (d) |
+| ~~No retention setting or "delete person X"; deleted text may linger in free pages and the WAL~~ closed in Phase 4 (d); backups and sync copies are outside msgkit | F13 | done |
 | Plain-text store | F13 | Phase 4 (e), on your choice |
 | Replay accepted after the 30-day prune | F14 | Phase 4 (f), opt-in |
 | No SBOM, signatures, provenance, SECURITY.md | | Phase 4 (g) |

@@ -18,6 +18,7 @@ use std::fmt;
 use std::net::{IpAddr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
+use std::time::Duration;
 
 use axum::body::Bytes;
 use axum::extract::rejection::{JsonRejection, QueryRejection};
@@ -31,7 +32,7 @@ use msgkit_core::device::{self, DeviceBatch, DeviceOptions};
 use msgkit_core::error::codes;
 use msgkit_core::facebook::{self, FacebookExportOptions};
 use msgkit_core::limits::Limits;
-use msgkit_core::store::{EventStore, MemoryStore};
+use msgkit_core::store::{EventStore, MemoryStore, RetentionStore};
 use msgkit_core::whatsapp_export::{self, WhatsAppExportOptions};
 use msgkit_core::{webhook, Event, ImportReport, SCHEMA_VERSION};
 use msgkit_store_sqlite::{SqliteStore, DEFAULT_RETENTION};
@@ -83,6 +84,26 @@ pub struct Config {
     /// when no `api_token` is set, in addition to `localhost`, `*.localhost` and loopback addresses. See
     /// [`Config::try_from_env`] (`MSGKIT_ALLOWED_HOSTS`). Ignored when an `api_token` is set.
     pub allowed_hosts: Vec<String>,
+    /// How long the id of an acknowledged (or erased or expired) event is remembered, so a redelivered webhook is
+    /// still recognised. `None` is [`DEFAULT_RETENTION`] (30 days). The id is pseudonymous personal data; meta
+    /// retries failed deliveries for several days, so going below that risks duplicates. `MSGKIT_ID_RETENTION_DAYS`.
+    pub id_retention: Option<Duration>,
+    /// When set, events that arrived this long ago and were never acknowledged are erased (their ids stay for
+    /// [`id_retention`](Self::id_retention)). `None`, the default, keeps them until a consumer acknowledges them.
+    /// `MSGKIT_PENDING_MAX_AGE_DAYS`.
+    pub pending_max_age: Option<Duration>,
+}
+
+/// The longest retention an environment variable may ask for, in days (a century): it keeps the arithmetic safe.
+const MAX_RETENTION_DAYS: u64 = 36_500;
+
+/// Reads one `MSGKIT_*_DAYS` value: a whole number of days from 1 to 36500. Unset or empty is `None`.
+fn days_var(get: &dyn Fn(&str) -> Option<String>, name: &str) -> Result<Option<Duration>, String> {
+    let Some(raw) = get(name).filter(|v| !v.is_empty()) else { return Ok(None) };
+    match raw.trim().parse::<u64>() {
+        Ok(n) if (1..=MAX_RETENTION_DAYS).contains(&n) => Ok(Some(Duration::from_secs(n * 86_400))),
+        _ => Err(format!("{name} must be a whole number of days from 1 to {MAX_RETENTION_DAYS}")),
+    }
 }
 
 /// Reads one `MSGKIT_MAX_*` value: a whole number of at least 1. Unset or empty keeps the default (`None`).
@@ -146,12 +167,31 @@ impl Config {
     ///
     /// # Errors
     /// A message when `MSGKIT_MAX_INPUT_BYTES`, `MSGKIT_MAX_LINE_BYTES`, `MSGKIT_MAX_MESSAGES` or
-    /// `MSGKIT_MAX_JSON_DEPTH` is not a whole number of at least 1, `MSGKIT_NO_LIMITS` is not `true` or `false`, or an
-    /// entry of `MSGKIT_ALLOWED_HOSTS` is not a plain host name or address.
+    /// `MSGKIT_MAX_JSON_DEPTH` is not a whole number of at least 1, `MSGKIT_NO_LIMITS` is not `true` or `false`, an
+    /// entry of `MSGKIT_ALLOWED_HOSTS` is not a plain host name or address, or `MSGKIT_ID_RETENTION_DAYS` or
+    /// `MSGKIT_PENDING_MAX_AGE_DAYS` is not a whole number of days from 1 to 36500.
     pub fn try_from_env() -> Result<Self, String> {
         let limits = limits_from(&|name| std::env::var(name).ok())?;
         let allowed_hosts = allowed_hosts_from(&|name| std::env::var(name).ok())?;
-        Ok(Self::from_env().with_limits(limits).with_allowed_hosts(allowed_hosts))
+        let get = |name: &str| std::env::var(name).ok();
+        let mut config = Self::from_env().with_limits(limits).with_allowed_hosts(allowed_hosts);
+        config.id_retention = days_var(&get, "MSGKIT_ID_RETENTION_DAYS")?;
+        config.pending_max_age = days_var(&get, "MSGKIT_PENDING_MAX_AGE_DAYS")?;
+        Ok(config)
+    }
+
+    /// Sets [`id_retention`](Self::id_retention).
+    #[must_use]
+    pub fn with_id_retention(mut self, retention: Duration) -> Self {
+        self.id_retention = Some(retention);
+        self
+    }
+
+    /// Sets [`pending_max_age`](Self::pending_max_age).
+    #[must_use]
+    pub fn with_pending_max_age(mut self, max_age: Duration) -> Self {
+        self.pending_max_age = Some(max_age);
+        self
     }
 
     /// Sets [`whatsapp`](Self::whatsapp).
@@ -223,6 +263,8 @@ impl Config {
             db_path: var("MSGKIT_DB_PATH").map(PathBuf::from),
             limits: Limits::default(),
             allowed_hosts: Vec::new(),
+            id_retention: None,
+            pending_max_age: None,
         }
     }
 }
@@ -320,7 +362,7 @@ impl AppState {
         let store: Box<dyn EventStore + Send> = match &config.db_path {
             Some(path) => {
                 let mut db = SqliteStore::open(path)?;
-                db.prune_acknowledged(DEFAULT_RETENTION)?;
+                maintain(&mut db, &config)?;
                 Box::new(db)
             }
             None => Box::new(MemoryStore::new()),
@@ -354,11 +396,38 @@ impl AppState {
     }
 }
 
-/// Forgets acknowledged event ids older than the retention window. Safe to
-/// call while the service is running (SQLite serializes writers); `main` calls
-/// it periodically so a long-running service does not grow without bound.
+/// Forgets acknowledged event ids older than the default retention window (30 days). Safe to
+/// call while the service is running (SQLite serializes writers). Kept for callers that only want that; the
+/// service itself uses [`maintain_database`], which also honours the configured retention.
 pub fn prune_database(path: &Path) -> msgkit_core::Result<usize> {
     SqliteStore::open(path)?.prune_acknowledged(DEFAULT_RETENTION)
+}
+
+/// What one maintenance pass did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Maintenance {
+    /// Held events erased because they were older than `pending_max_age`.
+    pub expired: usize,
+    /// Event ids forgotten because they were older than `id_retention`.
+    pub forgotten: usize,
+}
+
+/// One pass of retention: erases events nobody collected within `pending_max_age` (when set), then forgets ids
+/// older than `id_retention` (30 days unless set). Nothing is logged here and no content is returned.
+fn maintain(db: &mut SqliteStore, config: &Config) -> msgkit_core::Result<Maintenance> {
+    let expired = match config.pending_max_age {
+        Some(max_age) => db.expire_pending(max_age)?,
+        None => 0,
+    };
+    let forgotten = RetentionStore::prune_acknowledged(db, config.id_retention.unwrap_or(DEFAULT_RETENTION))?;
+    Ok(Maintenance { expired, forgotten })
+}
+
+/// Runs one retention pass on the database at `path` (see [`Config::id_retention`] and
+/// [`Config::pending_max_age`]). `main` calls it every six hours, so a long-running service does not grow without
+/// bound and does not keep personal data longer than configured.
+pub fn maintain_database(path: &Path, config: &Config) -> msgkit_core::Result<Maintenance> {
+    maintain(&mut SqliteStore::open(path)?, config)
 }
 
 /// An error response: `{"error": "<text>", "code": "<stable code>"}` (see docs/ERRORS.md). The text is for
@@ -819,5 +888,57 @@ mod tests {
             let e = allowed_hosts_from(&env(&[("MSGKIT_ALLOWED_HOSTS", bad)])).unwrap_err();
             assert!(!e.contains(bad), "{e}");
         }
+    }
+
+    #[test]
+    fn retention_days_are_read_and_bounded() {
+        let day = Duration::from_secs(86_400);
+        assert_eq!(days_var(&env(&[]), "MSGKIT_ID_RETENTION_DAYS").unwrap(), None);
+        assert_eq!(
+            days_var(&env(&[("MSGKIT_ID_RETENTION_DAYS", "")]), "MSGKIT_ID_RETENTION_DAYS").unwrap(),
+            None
+        );
+        assert_eq!(
+            days_var(&env(&[("MSGKIT_ID_RETENTION_DAYS", " 45 ")]), "MSGKIT_ID_RETENTION_DAYS").unwrap(),
+            Some(45 * day)
+        );
+        for bad in ["0", "-1", "1.5", "soon", "36501", "99999999999999999999"] {
+            let e = days_var(&env(&[("MSGKIT_PENDING_MAX_AGE_DAYS", bad)]), "MSGKIT_PENDING_MAX_AGE_DAYS")
+                .unwrap_err();
+            assert!(e.starts_with("MSGKIT_PENDING_MAX_AGE_DAYS must be"), "{e}");
+            assert!(!e.contains(bad) || bad.len() < 2, "the error must not repeat the value: {e}");
+        }
+    }
+
+    #[test]
+    fn a_maintenance_pass_expires_held_events_and_forgets_old_ids() {
+        use msgkit_core::store::conformance::sample_event;
+        let now = i64::try_from(
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
+        )
+        .unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("msgkit.db");
+        {
+            let mut db = SqliteStore::open(&path).unwrap();
+            db.insert_all(vec![sample_event("held", 1), sample_event("done", 2)]).unwrap();
+            db.acknowledge(&["done".to_owned()]).unwrap();
+        }
+        // Backdate the acknowledgement of `done` by 40 days and the arrival of `held` by 10 days.
+        let raw = rusqlite::Connection::open(&path).unwrap();
+        let ago = |days: i64| now - days * 86_400;
+        raw.execute("UPDATE events SET acked_at = ?1 WHERE id = 'done'", [ago(40)]).unwrap();
+        raw.execute("UPDATE events SET received_at = ?1 WHERE id = 'held'", [ago(10)]).unwrap();
+        drop(raw);
+
+        // Defaults: nothing is older than 30 days except the id backdated 40 days; held events are not expired.
+        let config = Config::default();
+        assert_eq!(maintain_database(&path, &config).unwrap(), Maintenance { expired: 0, forgotten: 1 });
+        // With a pending limit of 7 days the held event (backdated 10 days) goes too.
+        let config = Config::default().with_pending_max_age(Duration::from_secs(7 * 86_400));
+        assert_eq!(maintain_database(&path, &config).unwrap(), Maintenance { expired: 1, forgotten: 0 });
+        let mut db = SqliteStore::open(&path).unwrap();
+        assert!(!db.insert(sample_event("held", 1)).unwrap(), "the expired event's id is kept");
+        assert!(db.insert(sample_event("done", 2)).unwrap(), "the forgotten id is accepted again");
     }
 }

@@ -20,7 +20,7 @@ Every detector proposes a candidate with a regular expression (linear time) and 
 |---|---|---|---|
 | Email | a local part, an `@` and a dotted domain: letters, digits and `._%+-` before the `@`, dot-separated labels after it, a last label of at least two characters that starts with a letter | local part at most 64 and domain at most 253 bytes, no empty or hyphen-edged label | High |
 | Phone, international | `+` or `00`, a country code that does not start with 0, then digits with single spaces, dots, hyphens or parentheses between them | at least 8 and at most 15 digits, accepted by `msgkit_core::phone::normalize_phone` (one source of truth); a `+94` number ends after exactly 9 national digits, so `+94 70 000 0000 5 pm` masks the number and keeps the `5` | High |
-| Phone, Sri Lankan national | `0`, two digits, then 7 digits (`070 000 0000`, `070-0000000`, `(011) 000 0000`, `0700000000`) | the two digits are `7x` (the whole mobile level) or a geographic trunk code from the 2009 numbering plan (below) or `extra_area_codes`; only when `default_country_code` is `94` (the default) | Medium |
+| Phone, Sri Lankan national | `0`, two digits, then 7 digits (`070 000 0000`, `070-0000000`, `(011) 000 0000`, `0700000000`) | the two digits are `7x` (the whole mobile level) or a geographic trunk code from the **2009** numbering plan (**the list may be out of date**, see below) or `extra_area_codes`; only when `default_country_code` is `94` (the default) | Medium |
 | NIC, old format | 9 digits and `V`, `v`, `X` or `x`: year (2), day number (3), serial (3), check digit (1) | day number 1 to 366, or 501 to 866 for women (a woman's day number is the day plus 500) | High |
 | NIC, new format | 12 digits: year (4), day number (3), serial (4), check digit (1) | year 1900 to `max_birth_year` (default 2010), the same day numbers, and not an amount or a quantity (below) | Medium |
 | Card number | 13 to 19 digits, contiguous or in groups of four separated by one space or hyphen, plus the 4-6-5 (Amex) and 4-6-4 (Diners) layouts | Luhn, not a single repeated digit, and (unless `strict_card_prefix` is off) a known network prefix with a matching length: Visa, Mastercard (51 to 55 and 2221 to 2720), Amex, Discover, JCB, Diners, UnionPay | High (known network) or Medium (Luhn only) |
@@ -62,6 +62,13 @@ Placeholders are never matched again, and the text is masked again until a pass 
 * **A negative corpus** (`crates/msgkit-redact/tests/negatives.rs`) must never be masked: Sri Lankan marketplace text (prices in rupees, lakhs and millions, in English, Sinhala and Tamil; mileage; vehicle registration numbers; years; dates and times) and other everyday numbers. A change that masks any of them fails the build.
 * **Known false positives:** a 13 to 19 digit number that passes Luhn and starts like a card (some barcodes, some long references); a 12 digit number from 1900 to 2010 that is not a NIC (for example a compact date-time from those years); a digit run after "account" that is not an account number.
 * **Known false negatives:** numbers written with unusual separators, spelled out in words, split over lines or inside a longer token; Unicode digits; an IBAN in lower case; a national phone number in another country; a bank account without a keyword; every name that is not in `names`.
+
+## Backlog
+
+* A `redact` operation in the Python, Node.js and Kotlin packages and the HTTP service.
+* Re-check the geographic trunk codes against the current TRCSL numbering plan (the list is the 2009 one).
+* Sinhala and Tamil account keywords, once real samples exist (decision D6).
+* Remove `--exclude msgkit-redact` from the semver step of `.github/workflows/ci.yml` once this crate has a released baseline (the gate then covers it like every other crate).
 
 ## What it does not do
 

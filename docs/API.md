@@ -109,10 +109,12 @@ Configuration (environment):
 | `MSGKIT_WHATSAPP_VERIFY_TOKEN` | handshake token | unset → handshake rejected |
 | `MSGKIT_MESSENGER_APP_SECRET` / `_VERIFY_TOKEN` | same for Messenger | unset |
 | `MSGKIT_DB_PATH` | SQLite file for webhook events | unset → in memory, **lost on restart** |
+| `MSGKIT_REPLAY_PROTECTION` | `off`, `log` or `enforce`: refuse webhook events whose signed timestamp is outside the replay window (see [Replay protection](#replay-protection)). **`enforce` can drop real messages that arrive late: run `log` first** | `off` |
+| `MSGKIT_REPLAY_WINDOW_HOURS` | the oldest a webhook event may be, in whole hours from 1 to 8760; needs `log` or `enforce`. With `enforce`, `MSGKIT_ID_RETENTION_DAYS` must be at least as long | 192 (8 days) |
 | `MSGKIT_DB_KEY_FILE` | path of a file holding the database key (64 hexadecimal characters; for example a Docker secret). Needs a build with the `sqlcipher` feature and `MSGKIT_DB_PATH`; the service refuses to start otherwise, on a plain database, or on an encrypted one without a key. **Losing the key loses the data**; see [ENCRYPTION.md](ENCRYPTION.md) | unset (plain database) |
 | `MSGKIT_DB_KEY` | the key itself, instead of the file: **less safe** (environment variables show up in listings and crash reports). Set only one of the two | unset |
 | `MSGKIT_DEFAULT_COUNTRY_CODE` | calling code (1 to 3 digits, e.g. `94`) used to read national-format phone numbers in `POST /v1/store/erase`; the one your events were imported with. Only the operator sets it | unset (only `+` numbers are recognised as phone numbers) |
-| `MSGKIT_ID_RETENTION_DAYS` | days an acknowledged, erased or expired event id is remembered to reject redelivered webhooks (whole days, 1 to 36500). Ids are pseudonymous personal data; Meta retries for several days, so do not go very low | 30 |
+| `MSGKIT_ID_RETENTION_DAYS` | days an acknowledged, erased or expired event id is remembered to reject redelivered webhooks (whole days, 1 to 36500). Ids are pseudonymous personal data. Meta now retries a failed WhatsApp delivery for **up to 7 days** (it used to be 30), so 8 to 14 days is enough, also with replay protection on (see [Replay protection](#replay-protection)); 30 is the conservative default. Do not go below the retry window | 30 |
 | `MSGKIT_PENDING_MAX_AGE_DAYS` | erase events that were received this many days ago and never acknowledged (their ids stay for the id retention); whole days, 1 to 36500 | unset (keep until acknowledged) |
 | `MSGKIT_MAX_INPUT_BYTES` | largest request body for the imports (webhooks: the lower of this and 2 MiB); a whole number of at least 1 | 33554432 (32 MiB) |
 | `MSGKIT_MAX_LINE_BYTES` | longest WhatsApp export line; at least 1 | 262144 |
@@ -173,7 +175,24 @@ curl -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
 
 Events you do not acknowledge are listed again, so a crash in your consumer loses nothing. (`?drain=true` lists and acknowledges in one step; it is at-most-once, so use it only when losing an event on a crash is acceptable.)
 
-When an event is acknowledged its **content is erased** from the database and only its id is kept, so the service never becomes a permanent archive of messages. The id is remembered to reject redelivered webhooks, and is forgotten after 30 days (a pruning job runs every 6 hours; Meta retries for a few days at most).
+When an event is acknowledged its **content is erased** from the database and only its id is kept, so the service never becomes a permanent archive of messages. The id is remembered to reject redelivered webhooks, and is forgotten after 30 days by default (a pruning job runs every 6 hours; Meta retries a failed WhatsApp delivery for up to 7 days, so 8 to 14 days is enough: `MSGKIT_ID_RETENTION_DAYS`).
+
+### Replay protection
+
+A webhook body is signed, so a replayer cannot change it, but a captured delivery can be sent again. Event ids already reject a replay while the id is remembered; after the id is pruned an old delivery would be accepted again (audit finding F14). **Replay protection** closes that gap by refusing events whose own timestamp is outside a window. It is **off by default**, and it applies only to `/webhooks/*` (imports are not affected).
+
+| Platform | What the check uses | What the platform offers |
+|---|---|---|
+| WhatsApp Business Cloud API | `messages[].timestamp` (seconds), in the signed body | no delivery id or delivery time; retries a failed delivery for up to 7 days |
+| Messenger | `messaging[].timestamp` (milliseconds), in the signed body | no delivery id or delivery time; a few immediate retries, then alerts (an hour of failures can unsubscribe the Page) |
+
+* **Modes** (`MSGKIT_REPLAY_PROTECTION`): `off` (default, no check and the answer is unchanged); `log` (nothing is dropped; events that `enforce` would drop are counted in the answer and in a warning, field `would_drop`); `enforce` (those events are dropped).
+* **What is checked:** an event is **stale** if its timestamp is older than the window, and **future** if it is more than **10 minutes** ahead of the server clock. The default window is **8 days** (`MSGKIT_REPLAY_WINDOW_HOURS`, 192 hours): Meta's longest WhatsApp retry (7 days) and a day of margin.
+* **Run `log` first.** **A real message can arrive late with an old timestamp**: the timestamp is when the message was *sent*, so a user whose phone was offline, or a delivery that Meta retried for days, can produce a genuine event that is older than a short window. `enforce` drops such events for good (Meta gets `200` and does not retry). Run in `log` mode for a while, look at `would_drop` in the answers and the warnings, and switch to `enforce` only when nothing real would be dropped, or after widening the window.
+* **The server clock must be synchronised** (NTP, `chrony`, `systemd-timesyncd`, or the host's time service). The check compares the event's timestamp with this server's clock; a clock that is hours off would drop real messages (a slow clock sees them as "future") or accept old ones. A future timestamp within the 10-minute skew is accepted.
+* **The id retention must cover the window.** With `enforce` the service refuses to start if `MSGKIT_ID_RETENTION_DAYS` (default 30) is shorter than the window, naming both settings: otherwise a replay inside the window could be accepted after its id was forgotten. With the default 8-day window, 8 to 14 days of retention is enough (a shorter retention keeps less pseudonymous personal data).
+* **`drop_ids` caveat.** Erasing a person with `drop_ids` (`msgkit store erase --drop-ids`, `POST /v1/store/erase` with `"drop_ids": true`) forgets the ids of the erased events, so a replay of one of them **inside the window** would be accepted again. Keep the ids (the default) unless you accept that.
+* **A rejected replay is not an error.** The answer is `200 OK` (any other status makes Meta retry for days, and Messenger may unsubscribe the Page): `{"accepted": 1, "duplicates": 0, "warnings": ["1 event(s) outside the replay window were dropped"], "replay_protection": "enforce", "stale": 1, "future": 0}`. The three last fields appear only when the mode is not `off`. The log has one `warn` line per delivery with such events: `platform`, `dropped` (or `would_drop`), `stale`, `future` and `oldest_age_hours`, and **never** an id, a sender or text.
 
 The database file is **not encrypted**. Put it on an encrypted volume and restrict access (it is created owner-only on Unix). Embedding `msgkit-core` instead? Use `msgkit-store-sqlite` directly, or implement the `EventStore` trait for your own backend.
 

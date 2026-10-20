@@ -9,6 +9,8 @@
 //! Not covered: WhatsApp call webhooks (the Cloud API calling payloads are not
 //! normalized yet), delivery/read receipts and other non-message events.
 
+use std::time::Duration;
+
 use chrono::DateTime;
 use hmac::{Hmac, KeyInit, Mac};
 use serde_json::Value;
@@ -46,6 +48,89 @@ pub fn sign(app_secret: &[u8], body: &[u8]) -> String {
     let mut mac = HmacSha256::new_from_slice(app_secret).expect("HMAC accepts any key length");
     mac.update(body);
     format!("sha256={}", hex::encode(mac.finalize().into_bytes()))
+}
+
+/// How an event's timestamp compares with the clock, under a [`ReplayPolicy`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Freshness {
+    /// Within the window (and not from the future beyond the allowed clock skew).
+    Fresh,
+    /// Older than the window.
+    Stale,
+    /// Further in the future than the allowed clock skew.
+    Future,
+}
+
+/// Which webhook events are too old, or too far ahead, to be believed (replay protection, F14).
+///
+/// Meta signs the whole body, so a replayer cannot change the timestamp inside it. Together with the de-duplication
+/// by event id this closes the gap after the ids are forgotten: an event older than the window is refused whatever
+/// the store remembers, so the id retention must be at least as long as the window.
+///
+/// **A real message can be late.** Meta retries a failed WhatsApp delivery for up to 7 days, and the timestamp is
+/// when the message was *sent*, so a user whose phone was offline can produce an old but genuine message. The
+/// default window (8 days) covers Meta's longest retry; a shorter one drops such messages.
+///
+/// The check is pure: the caller passes the current time (`msgkit-core` never reads a clock), and the server's
+/// clock must be synchronised (NTP) for it to mean anything.
+///
+/// ```
+/// use std::time::Duration;
+/// use msgkit_core::webhook::ReplayPolicy;
+///
+/// let policy = ReplayPolicy::new(Duration::from_secs(3600)).with_future_skew(Duration::from_secs(60));
+/// assert_eq!(policy.window, Duration::from_secs(3600));
+/// assert_eq!(ReplayPolicy::default().window, ReplayPolicy::DEFAULT_WINDOW);
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct ReplayPolicy {
+    /// The oldest an event may be.
+    pub window: Duration,
+    /// How far ahead of the clock an event may be, for clocks that differ a little.
+    pub future_skew: Duration,
+}
+
+impl ReplayPolicy {
+    /// 8 days: Meta's longest WhatsApp retry (7 days) and a day of margin.
+    pub const DEFAULT_WINDOW: Duration = Duration::from_secs(8 * 24 * 60 * 60);
+    /// 10 minutes.
+    pub const DEFAULT_FUTURE_SKEW: Duration = Duration::from_secs(10 * 60);
+
+    /// A policy with this window and the default clock skew.
+    #[must_use]
+    pub fn new(window: Duration) -> Self {
+        ReplayPolicy { window, future_skew: Self::DEFAULT_FUTURE_SKEW }
+    }
+
+    /// Sets [`future_skew`](Self::future_skew).
+    #[must_use]
+    pub fn with_future_skew(mut self, skew: Duration) -> Self {
+        self.future_skew = skew;
+        self
+    }
+
+    /// Compares `event`'s timestamp with `now_unix_millis`. The edges are inclusive: an event exactly one window
+    /// old, or exactly one skew ahead, is fresh.
+    #[must_use]
+    pub fn classify(&self, event: &Event, now_unix_millis: i64) -> Freshness {
+        let millis = |d: Duration| i64::try_from(d.as_millis()).unwrap_or(i64::MAX);
+        let age = now_unix_millis.saturating_sub(event.timestamp().timestamp_millis());
+        if age > millis(self.window) {
+            Freshness::Stale
+        } else if age < millis(self.future_skew).saturating_neg() {
+            Freshness::Future
+        } else {
+            Freshness::Fresh
+        }
+    }
+}
+
+impl Default for ReplayPolicy {
+    fn default() -> Self {
+        Self::new(Self::DEFAULT_WINDOW)
+    }
 }
 
 fn str_at<'a>(v: &'a Value, path: &[&str]) -> Option<&'a str> {
@@ -266,5 +351,40 @@ mod tests {
         assert!(normalize_whatsapp(&v).is_err());
         let v: Value = serde_json::json!({"object": "whatsapp_business_account"});
         assert!(normalize_messenger(&v).is_err());
+    }
+
+    #[test]
+    fn replay_policy_edges_are_inclusive_and_cover_seconds_and_milliseconds() {
+        use crate::store::conformance::event_from;
+        let now_ms = 1_800_000_000_000_i64;
+        let at = |offset_ms: i64| {
+            // event_from takes seconds; the sub-second part is checked separately below.
+            event_from("e", (now_ms + offset_ms) / 1000, "+94700000000", "+94711111111")
+        };
+        let policy = ReplayPolicy::new(Duration::from_secs(3600)).with_future_skew(Duration::from_secs(60));
+
+        assert_eq!(policy.classify(&at(0), now_ms), Freshness::Fresh);
+        assert_eq!(policy.classify(&at(-3_600_000), now_ms), Freshness::Fresh, "exactly one window old");
+        assert_eq!(policy.classify(&at(-3_601_000), now_ms), Freshness::Stale);
+        assert_eq!(policy.classify(&at(60_000), now_ms), Freshness::Fresh, "exactly one skew ahead");
+        assert_eq!(policy.classify(&at(61_000), now_ms), Freshness::Future);
+        // Far away in both directions, and the default policy.
+        assert_eq!(policy.classify(&at(-86_400_000 * 400), now_ms), Freshness::Stale);
+        assert_eq!(policy.classify(&at(86_400_000 * 400), now_ms), Freshness::Future);
+        let d = ReplayPolicy::default();
+        assert_eq!(d.window, Duration::from_secs(8 * 86_400));
+        assert_eq!(d.future_skew, Duration::from_secs(600));
+        assert_eq!(d.classify(&at(-7 * 86_400_000), now_ms), Freshness::Fresh, "Meta's longest retry");
+        assert_eq!(d.classify(&at(-9 * 86_400_000), now_ms), Freshness::Stale);
+        assert_eq!(
+            d.classify(&at(9 * 60_000), now_ms),
+            Freshness::Fresh,
+            "9 minutes ahead is within the skew"
+        );
+        assert_eq!(d.classify(&at(11 * 60_000), now_ms), Freshness::Future);
+        // A huge window or skew never overflows.
+        let huge = ReplayPolicy::new(Duration::MAX).with_future_skew(Duration::MAX);
+        assert_eq!(huge.classify(&at(0), now_ms), Freshness::Fresh);
+        assert_eq!(huge.classify(&at(i64::MAX / 2000), i64::MIN / 2), Freshness::Fresh);
     }
 }

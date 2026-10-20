@@ -49,6 +49,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         auth = config.api_token.is_some(),
         durable = config.db_path.is_some(),
         encrypted = config.db_key.is_some(),
+        replay_protection = ?config.replay_protection,
         "starting msgkit-service on {bind}"
     );
 

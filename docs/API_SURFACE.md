@@ -64,6 +64,7 @@ The `normalize_*_webhook` operations do not verify signatures; verify first.
 | Item | Level |
 |---|---|
 | `SqliteStore::{open, open_in_memory, prune_acknowledged}` and its `EventStore` implementation | Stable |
+| `webhook::{ReplayPolicy, Freshness}` (msgkit-core), `ReplayMode` and `MSGKIT_REPLAY_PROTECTION` / `MSGKIT_REPLAY_WINDOW_HOURS` (service), and the webhook answer fields `replay_protection`, `stale`, `future` | Unstable until a release has used them |
 | `POST /v1/store/erase` (request `address`, `drop_ids`; answer `erased`, `request_id`, `handled_at`) | Unstable until a release has used it |
 | `DbKey`, `StoreOptions::key` / `with_key`, `encrypt_database`, `EncryptReport`, `cloud_synced_folder`, and the cargo features `sqlcipher` and `sqlcipher-vendored` (of `msgkit-store-sqlite`, `msgkit-service` and `msgkit-cli`) | Unstable until a release has used them |
 | `SqliteStore::{open_with, open_in_memory_with, checkpoint, compact}`, `StoreOptions`, and the `EraseStore` and `RetentionStore` implementations | Unstable until a release has used them |

@@ -80,8 +80,11 @@ use rusqlite::{params, Connection, TransactionBehavior};
 /// A database at version 1 is upgraded in place when opened; an older msgkit refuses a version 2 database.
 const SCHEMA_VERSION: i64 = 2;
 
-/// Suggested retention for acknowledged ids. Meta retries failed webhook
-/// deliveries for several days, so keep ids at least that long.
+/// Suggested retention for acknowledged ids: 30 days. Meta now retries a failed WhatsApp delivery for up to
+/// 7 days (it used to be 30), so 8 to 14 days is enough, and enough for replay protection with its default 8-day
+/// window; 30 is the conservative default kept from before. The id is pseudonymous personal data, so a shorter
+/// retention keeps less of it. Keep it at least as long as `MSGKIT_REPLAY_WINDOW_HOURS` when replay protection is
+/// enforced (the service checks).
 pub const DEFAULT_RETENTION: Duration = Duration::from_secs(30 * 24 * 60 * 60);
 
 const SCHEMA_SQL: &str = "

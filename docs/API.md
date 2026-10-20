@@ -27,6 +27,8 @@ Import operations return `data = {"events": [Event...], "warnings": [string...]}
 
 Option schemas are in [`schema/options.schema.json`](../schema/options.schema.json). Omitted options use defaults.
 
+> `verify_signature` answers `{"valid": false}` for a mismatch instead of returning an error; see [ERRORS.md](ERRORS.md#why-verify_signature-returns-valid-false-and-not-an-error).
+
 > `normalize_*_webhook` does **not** verify the signature. Call `verify_signature` over the raw request body first, or use the HTTP sidecar, which always does.
 
 ## C ABI

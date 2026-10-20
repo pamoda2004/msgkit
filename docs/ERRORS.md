@@ -33,6 +33,10 @@ The set only grows. A code is never renamed, and never reused for a different si
 
 "Covered by" names a conformance case (which every library binding must reproduce byte for byte) or a test. `crates/msgkit-core/tests/error_taxonomy.rs` checks that this table, `msgkit_core::error::codes::ALL` and the `code` description in `openapi.yaml` list the same codes, and that every test or case named here exists.
 
+## Why `verify_signature` returns `{"valid": false}` and not an error
+
+A wrong signature is an ordinary answer to the question "does this signature match?", not a failure of the operation. `verify_signature` therefore always succeeds with `{"valid": true}` or `{"valid": false}`, and returns an error only when it could not answer at all (for example a missing field, which is `invalid_input`). This keeps one distinction clear for callers: an error means the call itself was wrong or broke, `valid: false` means the call worked and the delivery should be rejected. The HTTP service, which acts on the answer, turns a mismatch into `401` with the code `signature_invalid`. Decided in Phase 3 (audit finding F10); the shape will not change within 1.x.
+
 ## Conformance
 
 * The library codes `invalid_input`, `parse_error` and `unknown_op` have conformance cases that the Rust, Python, Node.js, Kotlin runners reproduce byte for byte; the HTTP conformance runner also sends the import cases that fail (`facebook_not_an_export`, `facebook_wrong_type_is_not_echoed`, `device_wrong_type_is_not_echoed`) through the service and requires the same `code`.

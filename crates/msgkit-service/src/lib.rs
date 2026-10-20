@@ -761,11 +761,8 @@ fn new_request_id() -> Result<String, ApiError> {
 
 /// The current UTC time, to the second, as `2026-10-20T12:00:00Z`.
 fn utc_now() -> String {
-    let secs = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(0));
-    chrono::DateTime::from_timestamp(secs, 0)
-        .map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Secs, true))
+    jiff::Timestamp::from_second(jiff::Timestamp::now().as_second())
+        .map(|t| t.to_string())
         .unwrap_or_default()
 }
 

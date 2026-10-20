@@ -166,6 +166,8 @@ jobs:
         # The released-API baseline is the tagged prototype until the first real release exists. A crate that is
         # newer than the baseline has nothing to compare with and is excluded; it joins when the baseline moves to
         # the first release (msgkit-redact: added in Phase 4).
+        # BACKLOG: remove `--exclude msgkit-redact` as soon as msgkit-redact has a released baseline (docs/REDACTION.md).
+        # The exclusion covers only that crate; msgkit-core, -ffi, -service, -store-sqlite and -wasm are still checked.
         run: cargo semver-checks --workspace --exclude msgkit-redact --baseline-rev baseline-prototype
       - name: JSON Schema compatibility
         run: python scripts/schema_compat.py --base-ref "${{ steps.base.outputs.ref }}"

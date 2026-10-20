@@ -17,8 +17,8 @@ pub struct Summary {
 
 impl Summary {
     fn add(&mut self, redacted: &Redacted) {
-        for f in &redacted.findings {
-            *self.counts.entry(f.kind).or_insert(0) += 1;
+        for (kind, n) in redacted.counts() {
+            *self.counts.entry(kind).or_insert(0) += n;
         }
     }
 

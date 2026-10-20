@@ -46,7 +46,7 @@ Every detector proposes a candidate with a regular expression (linear time) and 
 | `Pseudonym(key)` | `[PHONE:7f3a9c217f3a9c21]` | 8 bytes (16 hex characters) of HMAC-SHA256 over the kind and the normalized value under your key: the same number written in different ways gets one token, different values get different tokens, another key gives other tokens. Keep the key out of source control; without it a token cannot be linked back. |
 | `keep_email_domain` | `[EMAIL @example.org]` | with a placeholder or `KeepLast`; not with a pseudonym |
 
-Placeholders are never matched again, so redacting twice changes nothing.
+Placeholders are never matched again, and the text is masked again until a pass finds nothing, so redacting twice changes nothing. (Masking a value can expose its neighbour: a number glued to an IBAN has no word boundary until the number is masked. `Redacted::findings` lists the first pass with positions; `Redacted::later` lists the kinds found on later passes, almost always none, and `counts()` adds both. The fuzzer found two such cases in the first CI run and both are regression tests.)
 
 ## Events
 

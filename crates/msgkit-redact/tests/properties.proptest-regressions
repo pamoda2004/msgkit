@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc fdae846d5cafa20496d0a6a6ab313b1113a8da8087b7ab38fbf302c965e2b7d3 # shrinks to parts = ["+94700000000", "GB82 WEST 1234 5698 7654 32", "|"], separator = ""

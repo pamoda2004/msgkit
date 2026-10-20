@@ -205,6 +205,28 @@ fn account_numbers_need_a_keyword_close_before_them() {
 }
 
 #[test]
+fn a_keyword_does_not_reach_past_the_placeholder_of_its_own_number() {
+    // Found by the fuzzer: masking the account number shortens the text, and a second pass must not then reach
+    // the digits that follow.
+    let r = redactor();
+    let text = "Account number: 100200300400, IBAN GB82 WEST 1234 5698 7654 31";
+    let once = r.redact_text(text).text;
+    assert_eq!(once, "Account number: [ACCOUNT], IBAN GB82 WEST 1234 5698 7654 31");
+    assert_eq!(r.redact_text(&once).text, once);
+}
+
+#[test]
+fn masking_a_value_can_expose_its_glued_neighbour_and_it_is_masked_on_a_later_pass() {
+    // No word boundary separates the number from the IBAN until the number is masked.
+    let r = redactor();
+    let out = r.redact_text("+94700000000GB82 WEST 1234 5698 7654 32|");
+    assert_eq!(out.text, "[PHONE][IBAN]|");
+    assert_eq!((out.findings.len(), out.later.clone()), (1, vec![Kind::Iban]));
+    assert_eq!(out.counts()[&Kind::Iban], 1);
+    assert_eq!(r.redact_text(&out.text).text, out.text);
+}
+
+#[test]
 fn a_card_is_not_also_reported_as_an_account_or_a_phone() {
     let out = redactor().redact_text("bank card 4111 1111 1111 1111");
     assert_eq!(out.text, "bank card [CARD]");

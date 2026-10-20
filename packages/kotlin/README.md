@@ -58,7 +58,8 @@ msgkit normalizes rows; reading them needs the `READ_SMS` / `READ_CALL_LOG` runt
 * **R8/ProGuard.** `msgkit-android` ships consumer rules that keep JNA and the native interface.
 * **JNA.** The JVM artifact depends on `net.java.dev.jna:jna`; the Android artifact depends on the `@aar` flavour (which carries `libjnidispatch.so`) and excludes the JVM jar.
 * **16 KiB pages.** The 64-bit Android libraries are linked with 16 KiB alignment, as required for Android 15+ devices and Google Play.
-* **Overriding the library.** Set `MSGKIT_LIB=/path/to/libmsgkit_ffi.so` (or use `-Djna.library.path`) to use a specific build.
+* **Overriding the library.** Set `MSGKIT_LIB=/path/to/libmsgkit_ffi.so` (or use `-Djna.library.path`) to use a specific build. This is an explicit choice that replaces the library bundled in the JAR, so use it only for a build you trust; there is no search relative to the install path.
+* **SBOM.** `./gradlew :msgkit:cyclonedxDirectBom :msgkit-android:cyclonedxDirectBom` writes the CycloneDX SBOMs of the JAR and the AAR to `build/reports/cyclonedx/` (the release workflow attaches them).
 
 ## Development
 

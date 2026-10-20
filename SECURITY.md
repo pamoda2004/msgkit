@@ -21,6 +21,10 @@ You can expect an acknowledgement within 7 days. Fixes for confirmed issues are 
 * Authentication bypass on the HTTP service.
 * Any path by which message content or personal data can reach logs, error messages or telemetry.
 
+## Verifying a release
+
+Release files are signed with Sigstore (keyless), come with build provenance and a CycloneDX SBOM, and can be checked with `cosign` and the GitHub CLI: see [docs/VERIFYING.md](docs/VERIFYING.md). Nothing has been released yet, so there is nothing to verify today; if you see a "msgkit" package that this repository did not publish, treat it as untrusted and tell us.
+
 ## Supported versions
 
 While the project is pre-1.0, only the latest released minor version receives security fixes.

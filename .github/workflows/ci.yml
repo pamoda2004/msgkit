@@ -124,6 +124,45 @@ jobs:
             echo "The default service binary links libssl or libcrypto: $(ldd target-default/release/msgkit-service | grep -c -E 'libssl|libcrypto')"
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
+  sbom:
+    name: SBOM (generate and validate)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+        with:
+          tool: cargo-cyclonedx@0.5.9
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-sbom.txt
+      # The same script the release workflow runs: so the first release is not the first time it runs.
+      # Nothing is signed or published here.
+      - name: Generate and validate the SBOMs
+        run: |
+          export SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)
+          python scripts/sbom.py --out sbom
+      - run: python -m unittest discover -s scripts/tests -v
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sbom
+          path: sbom/*.cdx.json
+          retention-days: 7
+
   msrv:
     name: Rust MSRV (1.88)
     runs-on: ubuntu-latest

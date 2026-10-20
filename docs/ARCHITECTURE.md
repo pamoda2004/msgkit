@@ -27,6 +27,7 @@
 * **`msgkit-ffi`** exposes `dispatch` over a C ABI (3 functions). Anything with a C FFI can load it.
 * **`msgkit-service`** exposes the same operations over HTTP for stacks where loading a native library is impractical (JVM backends, serverless, other containers) and hosts webhook receivers.
 * **`msgkit-cli`** is for scripting and for trying things out.
+* **`msgkit-redact`** is an optional crate on top of `msgkit-core` (it uses the core's model and phone normalizer, and nothing uses it): best-effort masking of identifiers in text and events, see [REDACTION.md](REDACTION.md). It has no binding yet.
 * **`msgkit-wasm`** is the same `dispatch` compiled to WebAssembly with a five-function, import-free ABI. It needs no generated glue, runs unchanged in Node, browsers, Deno and Bun, and avoids per-platform native binaries for JavaScript users.
 * **`packages/`** holds the idiomatic wrappers: `@pamoda2004/msgkit` (JS over the wasm module), `msgkit` (Python over `msgkit-ffi` with ctypes) and `msgkit` / `msgkit-android` (Kotlin over `msgkit-ffi` with JNA). They contain **no parsing logic**: they serialize options to JSON, call `dispatch`, and decode the JSON into language-native types. That is why every language gives byte-identical results, and why a new operation added to `api::dispatch` becomes available everywhere by adding one small function per package.
 

@@ -66,6 +66,15 @@ The `normalize_*_webhook` operations do not verify signatures; verify first.
 | `DEFAULT_RETENTION` | Stable |
 | Database file layout | Unstable: do not read or write the file yourself. |
 
+## Rust (`msgkit-redact`)
+
+New and optional (see [REDACTION.md](REDACTION.md)). Everything in it is **Unstable** until it has been used by a release: no binding, no HTTP operation and no JSON schema depends on it, and it is outside the `cargo-semver-checks` gate until the baseline moves to the first release.
+
+| Item | Level |
+|---|---|
+| `Redactor::{new, detect, redact_text, redact_event, redact_event_counted, redact_report}`, `RedactConfig` and its `with_*` setters, `Kind`, `Mask`, `Confidence`, `IdPolicy`, `Finding`, `Redacted`, `Summary`, `ConfigError` | Unstable |
+| Placeholder text (`[PHONE]` and the like), the detection rules and the numbering-plan data | Unstable: detectors are refined over time; a text that was not masked may be, and the reverse |
+
 ## C ABI (`msgkit-ffi`) and WebAssembly ABI (`msgkit-wasm`)
 
 Stable: the exported function names and signatures documented in [API.md](API.md) (`msgkit_call`, `msgkit_free`, `msgkit_version`; for WebAssembly `msgkit_alloc`, `msgkit_dealloc`, `msgkit_call`, `msgkit_last_len`, `msgkit_version`).

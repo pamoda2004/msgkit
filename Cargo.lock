@@ -731,6 +731,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "msgkit-redact"
+version = "0.2.0"
+dependencies = [
+ "hex",
+ "hmac",
+ "msgkit-core",
+ "proptest",
+ "regex",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "msgkit-service"
 version = "0.2.0"
 dependencies = [

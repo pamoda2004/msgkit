@@ -18,6 +18,10 @@ Messages and call logs are some of the most sensitive personal data there is. ms
 6. **Transport.** Serve webhooks over HTTPS only; if the sidecar is reachable beyond localhost, set `MSGKIT_API_TOKEN` and put it behind TLS.
 7. **Platform terms.** Use only the official APIs and user-initiated exports described in [SUPPORTED_SOURCES.md](SUPPORTED_SOURCES.md).
 
+## Redaction (optional, best effort)
+
+The optional `msgkit-redact` crate masks phone numbers, Sri Lankan NIC numbers, card and bank account numbers, IBANs and email addresses in text and in events, for example before you log, share or test with imported data. It is **not anonymisation**: names, places and free text are not detected, and every detector has false negatives. What it finds, what it leaves alone and how to configure it: [REDACTION.md](REDACTION.md).
+
 ## Do not use msgkit to
 
 * read someone else's messages without their knowledge or consent (stalkerware),

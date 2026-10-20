@@ -28,7 +28,10 @@
 //!   phone number matches), `expire_pending` removes events nobody collected,
 //!   and `prune_acknowledged` forgets old ids. After a deletion the write-ahead
 //!   log is checkpointed and truncated; [`SqliteStore::compact`] also runs
-//!   `VACUUM`.
+//!   `VACUUM`. Acknowledging does not truncate the log (it would make every
+//!   acknowledge expensive): acknowledged text can stay in the `-wal` file
+//!   until [`SqliteStore::checkpoint`] runs. `msgkit-service` calls it every
+//!   six hours; a library user should do the same.
 //! * **Ids are personal data too.** An id is derived from the sender and the
 //!   text (webhook ids from the platform's message id). It holds no readable
 //!   content, but anyone who can guess the content can confirm it, so it is
@@ -766,6 +769,55 @@ mod tests {
         let store = SqliteStore::open(&path).unwrap();
         assert_eq!(user_version(&store.conn).unwrap(), SCHEMA_VERSION);
         assert_eq!(store.len().unwrap(), 0);
+    }
+
+    #[test]
+    fn an_interrupted_upgrade_leaves_a_valid_version_1_database() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("msgkit.db");
+        let json = serde_json::to_string(&sample_event("held", 1)).unwrap();
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE events (
+                    seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE, timestamp_ms INTEGER NOT NULL,
+                    channel TEXT NOT NULL, kind TEXT NOT NULL, json TEXT, acked_at INTEGER);
+                 PRAGMA journal_mode = WAL;
+                 PRAGMA user_version = 1;
+                 CREATE TRIGGER stop_upgrade BEFORE UPDATE ON events BEGIN SELECT RAISE(ABORT, 'interrupted'); END;",
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO events (id, timestamp_ms, channel, kind, json) VALUES ('held', 1000, 'whatsapp', 'message', ?1)",
+                params![json],
+            )
+            .unwrap();
+        }
+
+        // The trigger makes the second step of the upgrade (stamping the rows) fail after the column was added.
+        assert!(matches!(SqliteStore::open(&path), Err(Error::Storage(_))), "the upgrade must fail here");
+
+        // Nothing of the upgrade stayed: still version 1, no new column, the row untouched.
+        let conn = Connection::open(&path).unwrap();
+        assert_eq!(user_version(&conn).unwrap(), 1);
+        let has_column: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('events') WHERE name = 'received_at'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(has_column, 0, "the half-finished upgrade was not rolled back");
+        let kept: String =
+            conn.query_row("SELECT json FROM events WHERE id = 'held'", [], |r| r.get(0)).unwrap();
+        assert_eq!(kept, json);
+
+        // Once the obstacle is gone the same file upgrades normally.
+        conn.execute_batch("DROP TRIGGER stop_upgrade").unwrap();
+        drop(conn);
+        let store = SqliteStore::open(&path).unwrap();
+        assert_eq!(user_version(&store.conn).unwrap(), SCHEMA_VERSION);
+        assert_eq!(store.list().unwrap(), vec![sample_event("held", 1)]);
     }
 
     #[test]

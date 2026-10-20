@@ -412,14 +412,19 @@ pub struct Maintenance {
     pub forgotten: usize,
 }
 
-/// One pass of retention: erases events nobody collected within `pending_max_age` (when set), then forgets ids
-/// older than `id_retention` (30 days unless set). Nothing is logged here and no content is returned.
+/// One pass of retention: erases events nobody collected within `pending_max_age` (when set), forgets ids
+/// older than `id_retention` (30 days unless set), and truncates the write-ahead log. Nothing is logged here and
+/// no content is returned.
 fn maintain(db: &mut SqliteStore, config: &Config) -> msgkit_core::Result<Maintenance> {
     let expired = match config.pending_max_age {
         Some(max_age) => db.expire_pending(max_age)?,
         None => 0,
     };
     let forgotten = RetentionStore::prune_acknowledged(db, config.id_retention.unwrap_or(DEFAULT_RETENTION))?;
+    // Acknowledging does not empty the write-ahead log (it would make every acknowledge expensive), so every pass
+    // does, whether or not it deleted anything: acknowledged content leaves the log within one interval. A busy
+    // reader can make this fail to truncate once; the next pass tries again.
+    db.checkpoint()?;
     Ok(Maintenance { expired, forgotten })
 }
 
@@ -908,6 +913,37 @@ mod tests {
             assert!(e.starts_with("MSGKIT_PENDING_MAX_AGE_DAYS must be"), "{e}");
             assert!(!e.contains(bad) || bad.len() < 2, "the error must not repeat the value: {e}");
         }
+    }
+
+    #[test]
+    fn a_maintenance_pass_removes_acknowledged_text_from_the_write_ahead_log() {
+        use msgkit_core::store::conformance::event_from;
+        const MARKER: &str = "zq9x7k2-log-marker-text";
+        let bytes = |path: &Path| {
+            let mut name = path.as_os_str().to_owned();
+            name.push("-wal");
+            std::fs::read(Path::new(&name)).unwrap_or_default()
+        };
+        let has = |hay: &[u8]| hay.windows(MARKER.len()).any(|w| w == MARKER.as_bytes());
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("msgkit.db");
+        // The service's own connection stays open, as it does while running.
+        let mut db = SqliteStore::open(&path).unwrap();
+        let mut event = event_from("a", 1, "+94700000000", "+94711111111");
+        if let Event::Message(m) = &mut event {
+            m.body = Some(MARKER.to_owned());
+            m.raw = None;
+        }
+        db.insert(event).unwrap();
+        db.acknowledge(&["a".to_owned()]).unwrap();
+        assert!(has(&bytes(&path)), "acknowledging alone leaves the text in the log; the test must see that");
+
+        // Nothing is old enough to delete, yet the pass still empties the log.
+        let done = maintain_database(&path, &Config::default()).unwrap();
+        assert_eq!(done, Maintenance { expired: 0, forgotten: 0 });
+        assert!(!has(&bytes(&path)), "the maintenance pass left acknowledged text in the write-ahead log");
+        drop(db);
     }
 
     #[test]

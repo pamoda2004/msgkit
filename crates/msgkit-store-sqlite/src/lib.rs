@@ -42,9 +42,14 @@
 //!   every six hours; a library user must call it.
 //! * **Multi-process safe.** Several processes may open the same file; writers
 //!   wait up to five seconds for each other.
-//! * **Not encrypted.** Content is stored as plain JSON. Use full-disk
-//!   encryption or an encrypted volume, and restrict file access (the file is
-//!   created owner-only on Unix).
+//! * **Encrypted only on request.** By default content is stored as plain
+//!   JSON: use full-disk encryption or an encrypted volume, and restrict file
+//!   access (the file is created owner-only on Unix). Built with the
+//!   `sqlcipher` feature and given a [`DbKey`] in [`StoreOptions`], the whole
+//!   file (and its log) is encrypted with SQLCipher. The store fails closed: a
+//!   key with a plain file or a build without SQLCipher, and an encrypted file
+//!   without a key, are all refused. Losing the key loses the data. Convert an
+//!   existing database once with [`encrypt_database`]. See `docs/ENCRYPTION.md`.
 //! * **Keep it out of cloud-synced folders.** A production database must not
 //!   live in `OneDrive`, Google Drive, Dropbox or any similar synced folder:
 //!   those copy the file, its `-wal` file and every earlier version to other
@@ -54,6 +59,12 @@
 //!   write-ahead log. It cannot recall backups, snapshots, copies made by the
 //!   operating system or a sync client, or bytes a flash drive's wear levelling
 //!   keeps (use an encrypted volume for that).
+
+mod encrypt;
+mod key;
+
+pub use encrypt::{encrypt_database, EncryptReport};
+pub use key::{cloud_synced_folder, DbKey};
 
 use std::fmt::Display;
 use std::path::Path;
@@ -100,9 +111,13 @@ const MIGRATE_1_TO_2_SQL: &str = "ALTER TABLE events ADD COLUMN received_at INTE
 /// assert!(StoreOptions::default().secure_delete);
 /// assert!(!StoreOptions::default().with_secure_delete(false).secure_delete);
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct StoreOptions {
+    /// The key of an encrypted database (SQLCipher; build with the `sqlcipher` or `sqlcipher-vendored` feature).
+    /// The store **fails closed**: a key with a build that cannot encrypt, a key with a plain database file, and an
+    /// encrypted file without a key are all refused, never opened unencrypted. A new file is created encrypted.
+    pub key: Option<DbKey>,
     /// Overwrite deleted content with zeros (SQLite `secure_delete = ON`). On by default; it makes deletes and
     /// updates a little slower. The setting belongs to this connection: another process that opens the same file
     /// without it, such as an older msgkit, does not overwrite.
@@ -111,11 +126,18 @@ pub struct StoreOptions {
 
 impl Default for StoreOptions {
     fn default() -> Self {
-        StoreOptions { secure_delete: true }
+        StoreOptions { key: None, secure_delete: true }
     }
 }
 
 impl StoreOptions {
+    /// Sets [`key`](Self::key).
+    #[must_use]
+    pub fn with_key(mut self, key: DbKey) -> Self {
+        self.key = Some(key);
+        self
+    }
+
     /// Sets [`secure_delete`](Self::secure_delete).
     #[must_use]
     pub fn with_secure_delete(mut self, on: bool) -> Self {
@@ -126,6 +148,35 @@ impl StoreOptions {
 
 fn storage(e: impl Display) -> Error {
     Error::Storage(e.to_string())
+}
+
+/// The first bytes of every plain SQLite file. An encrypted file starts with random bytes instead.
+const PLAIN_HEADER: &[u8; 16] = b"SQLite format 3\0";
+
+/// Whether the file at `path` starts like a plain SQLite database.
+fn has_plain_header(path: &Path) -> bool {
+    use std::io::Read;
+    let mut head = [0_u8; 16];
+    std::fs::File::open(path).and_then(|mut f| f.read_exact(&mut head)).is_ok() && &head == PLAIN_HEADER
+}
+
+/// Whether the file exists and holds something (an empty file is a database that was never written to).
+fn has_content(path: &Path) -> bool {
+    std::fs::metadata(path).is_ok_and(|m| m.len() > 0)
+}
+
+/// Refuses a connection whose SQLite is not SQLCipher. Plain SQLite ignores `PRAGMA key`, so without this check a
+/// build without the feature would silently write an unencrypted database while a key is configured.
+fn require_cipher(conn: &Connection) -> Result<()> {
+    let version: Option<String> = conn.query_row("PRAGMA cipher_version", [], |r| r.get(0)).ok();
+    if version.is_some_and(|v| !v.is_empty()) {
+        Ok(())
+    } else {
+        Err(Error::InvalidInput(
+            "a database key is set, but this build has no SQLCipher support (build with the `sqlcipher` feature)"
+                .to_owned(),
+        ))
+    }
 }
 
 fn user_version(conn: &Connection) -> Result<i64> {
@@ -182,13 +233,37 @@ impl SqliteStore {
     /// Opens (creating if needed) the database at `path`.
     pub fn open_with(path: impl AsRef<Path>, options: &StoreOptions) -> Result<Self> {
         let path = path.as_ref();
+        // Fail closed before touching the file: what is on disk must agree with the key setting.
+        if has_content(path) {
+            match (options.key.is_some(), has_plain_header(path)) {
+                (false, false) => {
+                    return Err(storage(
+                        "the database file is not a plain SQLite database: if it is encrypted, a key is required \
+                         (MSGKIT_DB_KEY_FILE)",
+                    ));
+                }
+                (true, true) => {
+                    return Err(Error::InvalidInput(
+                        "a database key is set, but the database is not encrypted: encrypt it once with \
+                         `msgkit store encrypt`, or unset the key (it is not used on a plain database)"
+                            .to_owned(),
+                    ));
+                }
+                _ => {}
+            }
+        }
         let is_new = !path.exists();
         let conn =
             Connection::open(path).map_err(|e| storage(format!("cannot open {}: {e}", path.display())))?;
         if is_new {
             restrict_permissions(path);
         }
-        Self::init(conn, options)
+        let opened = Self::init(conn, options);
+        if opened.is_err() && is_new && !has_content(path) {
+            // Nothing was written: do not leave an empty file behind that the next start would take for a database.
+            let _ = std::fs::remove_file(path);
+        }
+        opened
     }
 
     /// A private in-memory database, mainly for tests.
@@ -203,9 +278,19 @@ impl SqliteStore {
 
     fn init(conn: Connection, options: &StoreOptions) -> Result<Self> {
         conn.busy_timeout(Duration::from_secs(5)).map_err(storage)?;
+        if let Some(key) = &options.key {
+            conn.execute_batch(&key.pragma()).map_err(storage)?;
+            require_cipher(&conn)?;
+        }
         // Reading user_version first fails fast with "file is not a database"
-        // if the path points at something that is not SQLite.
-        let version = user_version(&conn)?;
+        // if the path points at something that is not SQLite (or, with a key, at a database that key does not open).
+        let version = user_version(&conn).map_err(|e| {
+            if options.key.is_some() {
+                storage("the database cannot be read with the configured key (wrong key, or a damaged file)")
+            } else {
+                e
+            }
+        })?;
         if version > SCHEMA_VERSION {
             return Err(storage(format!(
                 "database layout version {version} is newer than this library supports ({SCHEMA_VERSION}); upgrade msgkit"

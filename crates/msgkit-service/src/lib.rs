@@ -35,7 +35,8 @@ use msgkit_core::limits::Limits;
 use msgkit_core::store::{EraseOptions, EraseStore, EventStore, MemoryStore, RetentionStore};
 use msgkit_core::whatsapp_export::{self, WhatsAppExportOptions};
 use msgkit_core::{webhook, Event, ImportReport, SCHEMA_VERSION};
-use msgkit_store_sqlite::{SqliteStore, DEFAULT_RETENTION};
+pub use msgkit_store_sqlite::cloud_synced_folder;
+use msgkit_store_sqlite::{DbKey, SqliteStore, StoreOptions, DEFAULT_RETENTION};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -96,6 +97,34 @@ pub struct Config {
     /// one the events were imported with. Set by the operator only (`MSGKIT_DEFAULT_COUNTRY_CODE`); a request
     /// cannot send one, so clients use `+` numbers for other countries.
     pub default_country_code: Option<String>,
+    /// The key of an encrypted database (`MSGKIT_DB_KEY_FILE`, or the less safe `MSGKIT_DB_KEY`): 64 hexadecimal
+    /// characters. Needs a build with the `sqlcipher` feature, and `db_path`. The service refuses to start if a key
+    /// is set and the build cannot encrypt, if the database is plain, or if the database is encrypted and there is
+    /// no key. Never shown by `Debug`, never logged. Losing the key loses the data.
+    pub db_key: Option<DbKey>,
+}
+
+/// `MSGKIT_DB_KEY_FILE` (the path of a file holding the key, for example a Docker secret) or `MSGKIT_DB_KEY` (the key
+/// itself, which an environment listing, a crash report or a child process can expose: less safe). Errors name the
+/// setting and never repeat its value.
+fn db_key_from(
+    get: &dyn Fn(&str) -> Option<String>,
+    read: &dyn Fn(&str) -> std::io::Result<String>,
+) -> Result<Option<DbKey>, String> {
+    let file = get("MSGKIT_DB_KEY_FILE").filter(|v| !v.trim().is_empty());
+    let direct = get("MSGKIT_DB_KEY").filter(|v| !v.trim().is_empty());
+    let (name, text) = match (file, direct) {
+        (None, None) => return Ok(None),
+        (Some(_), Some(_)) => return Err("set only one of MSGKIT_DB_KEY_FILE and MSGKIT_DB_KEY".to_owned()),
+        (Some(path), None) => (
+            "MSGKIT_DB_KEY_FILE",
+            read(path.trim()).map_err(|_| "MSGKIT_DB_KEY_FILE cannot be read".to_owned())?,
+        ),
+        (None, Some(key)) => ("MSGKIT_DB_KEY", key),
+    };
+    DbKey::from_hex(&text)
+        .map(Some)
+        .map_err(|_| format!("{name} must hold a key of 64 hexadecimal characters (256 bits)"))
 }
 
 /// `MSGKIT_DEFAULT_COUNTRY_CODE`: a calling code of one to three digits, with or without a leading `+`.
@@ -191,7 +220,9 @@ impl Config {
     /// `MSGKIT_MAX_JSON_DEPTH` is not a whole number of at least 1, `MSGKIT_NO_LIMITS` is not `true` or `false`, an
     /// entry of `MSGKIT_ALLOWED_HOSTS` is not a plain host name or address, or `MSGKIT_ID_RETENTION_DAYS` or
     /// `MSGKIT_PENDING_MAX_AGE_DAYS` is not a whole number of days from 1 to 36500, or `MSGKIT_DEFAULT_COUNTRY_CODE`
-    /// is not a calling code of 1 to 3 digits.
+    /// is not a calling code of 1 to 3 digits, or the database key settings are wrong (`MSGKIT_DB_KEY_FILE` cannot be
+    /// read, a key is not 64 hexadecimal characters, both settings are given, or a key is given without
+    /// `MSGKIT_DB_PATH`).
     pub fn try_from_env() -> Result<Self, String> {
         let limits = limits_from(&|name| std::env::var(name).ok())?;
         let allowed_hosts = allowed_hosts_from(&|name| std::env::var(name).ok())?;
@@ -200,6 +231,13 @@ impl Config {
         config.id_retention = days_var(&get, "MSGKIT_ID_RETENTION_DAYS")?;
         config.pending_max_age = days_var(&get, "MSGKIT_PENDING_MAX_AGE_DAYS")?;
         config.default_country_code = country_code_var(&get)?;
+        config.db_key = db_key_from(&get, &|path| std::fs::read_to_string(path))?;
+        if config.db_key.is_some() && config.db_path.is_none() {
+            return Err(
+                "MSGKIT_DB_KEY_FILE / MSGKIT_DB_KEY needs MSGKIT_DB_PATH: there is no database to encrypt"
+                    .to_owned(),
+            );
+        }
         Ok(config)
     }
 
@@ -216,6 +254,22 @@ impl Config {
         let code = code.as_ref().trim();
         self.default_country_code = Some(code.strip_prefix('+').unwrap_or(code).to_owned());
         self
+    }
+
+    /// Sets [`db_key`](Self::db_key).
+    #[must_use]
+    pub fn with_db_key(mut self, key: DbKey) -> Self {
+        self.db_key = Some(key);
+        self
+    }
+
+    /// The options the SQLite store is opened with.
+    fn store_options(&self) -> StoreOptions {
+        let options = StoreOptions::default();
+        match &self.db_key {
+            Some(key) => options.with_key(key.clone()),
+            None => options,
+        }
     }
 
     /// Sets [`pending_max_age`](Self::pending_max_age).
@@ -297,6 +351,7 @@ impl Config {
             id_retention: None,
             pending_max_age: None,
             default_country_code: None,
+            db_key: None,
         }
     }
 }
@@ -419,7 +474,7 @@ impl AppState {
         config.limits.validate()?;
         let store = match &config.db_path {
             Some(path) => {
-                let mut db = SqliteStore::open(path)?;
+                let mut db = SqliteStore::open_with(path, &config.store_options())?;
                 maintain(&mut db, &config)?;
                 Backend::Sqlite(db)
             }
@@ -514,7 +569,7 @@ fn maintain(db: &mut SqliteStore, config: &Config) -> msgkit_core::Result<Mainte
 /// [`Config::pending_max_age`]). `main` calls it every six hours, so a long-running service does not grow without
 /// bound and does not keep personal data longer than configured.
 pub fn maintain_database(path: &Path, config: &Config) -> msgkit_core::Result<Maintenance> {
-    maintain(&mut SqliteStore::open(path)?, config)
+    maintain(&mut SqliteStore::open_with(path, &config.store_options())?, config)
 }
 
 /// An error response: `{"error": "<text>", "code": "<stable code>"}` (see docs/ERRORS.md). The text is for
@@ -1159,5 +1214,45 @@ mod tests {
             Config::default().with_default_country_code("+94").default_country_code.as_deref(),
             Some("94")
         );
+    }
+
+    #[test]
+    fn the_database_key_comes_from_a_file_or_the_environment_and_errors_never_repeat_it() {
+        let key = "0123456789abcdef".repeat(4);
+        let read_ok = |path: &str| {
+            assert_eq!(path, "/run/secrets/db_key");
+            Ok(format!(
+                "{key}
+"
+            ))
+        };
+        let no_file = |_: &str| -> std::io::Result<String> { panic!("must not read a file") };
+        let hex = |k: Option<DbKey>| format!("{:?}", k.unwrap());
+
+        // Neither set: no key. A blank value counts as unset.
+        assert!(db_key_from(&env(&[]), &no_file).unwrap().is_none());
+        assert!(db_key_from(&env(&[("MSGKIT_DB_KEY", "  ")]), &no_file).unwrap().is_none());
+        // The file wins as the safe way; the direct value works too.
+        let from_file =
+            db_key_from(&env(&[("MSGKIT_DB_KEY_FILE", "/run/secrets/db_key")]), &read_ok).unwrap();
+        assert_eq!(hex(from_file), "DbKey(<redacted>)");
+        assert!(db_key_from(&env(&[("MSGKIT_DB_KEY", &key)]), &no_file).unwrap().is_some());
+
+        // Both set, an unreadable file and a bad key are all refused, naming only the setting.
+        let both = [("MSGKIT_DB_KEY_FILE", "/x"), ("MSGKIT_DB_KEY", key.as_str())];
+        assert_eq!(
+            db_key_from(&env(&both), &no_file).unwrap_err(),
+            "set only one of MSGKIT_DB_KEY_FILE and MSGKIT_DB_KEY"
+        );
+        let unreadable = |_: &str| Err(std::io::Error::other("secret path detail"));
+        assert_eq!(
+            db_key_from(&env(&[("MSGKIT_DB_KEY_FILE", "/x")]), &unreadable).unwrap_err(),
+            "MSGKIT_DB_KEY_FILE cannot be read"
+        );
+        let short = |_: &str| Ok("not-a-key-SECRET".to_owned());
+        let e = db_key_from(&env(&[("MSGKIT_DB_KEY_FILE", "/x")]), &short).unwrap_err();
+        assert_eq!(e, "MSGKIT_DB_KEY_FILE must hold a key of 64 hexadecimal characters (256 bits)");
+        let e = db_key_from(&env(&[("MSGKIT_DB_KEY", "not-a-key-SECRET")]), &no_file).unwrap_err();
+        assert_eq!(e, "MSGKIT_DB_KEY must hold a key of 64 hexadecimal characters (256 bits)");
     }
 }

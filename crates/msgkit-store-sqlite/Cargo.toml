@@ -12,6 +12,13 @@ authors.workspace = true
 [lints]
 workspace = true
 
+[features]
+# Encrypts the whole database file with SQLCipher (AES-256, also the write-ahead log). Off by default: the default
+# build is plain SQLite and needs no OpenSSL. This links the system OpenSSL (libssl-dev on Linux); on Windows and
+# macOS, or where there is none, use `sqlcipher-vendored` to build OpenSSL from source (needs Perl and a C compiler).
+sqlcipher = ["rusqlite/bundled-sqlcipher"]
+sqlcipher-vendored = ["sqlcipher", "rusqlite/bundled-sqlcipher-vendored-openssl"]
+
 [dependencies]
 msgkit-core.workspace = true
 rusqlite = { version = "0.40.2", features = ["bundled"] }

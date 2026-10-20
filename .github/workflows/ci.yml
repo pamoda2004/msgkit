@@ -79,6 +79,51 @@ jobs:
       # The committed JSON Schemas must match the Rust types.
       - run: cargo test -p msgkit-core --test schema --locked
 
+  sqlcipher:
+    name: SQLCipher (build, test, size)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          components: clippy
+      # No build cache on purpose: the build times below are cold-build times, comparable from run to run.
+      # The system OpenSSL is linked (the `sqlcipher` feature); `sqlcipher-vendored` builds OpenSSL from source.
+      - run: sudo apt-get update && sudo apt-get install -y libssl-dev pkg-config
+      - name: Tests with SQLCipher
+        env:
+          FEATURES: msgkit-store-sqlite/sqlcipher,msgkit-service/sqlcipher,msgkit-cli/sqlcipher
+        run: |
+          cargo clippy -p msgkit-store-sqlite -p msgkit-service -p msgkit-cli --all-targets --locked --features "$FEATURES" -- -D warnings
+          cargo test -p msgkit-store-sqlite -p msgkit-service -p msgkit-cli --locked --features "$FEATURES"
+      - name: Build time and size, default versus SQLCipher
+        env:
+          FEATURES: msgkit-store-sqlite/sqlcipher,msgkit-service/sqlcipher,msgkit-cli/sqlcipher
+        run: |
+          start=$(date +%s)
+          CARGO_TARGET_DIR=target-default cargo build --release --locked -p msgkit-service -p msgkit-cli
+          default_secs=$(( $(date +%s) - start ))
+          start=$(date +%s)
+          CARGO_TARGET_DIR=target-sqlcipher cargo build --release --locked -p msgkit-service -p msgkit-cli --features "$FEATURES"
+          cipher_secs=$(( $(date +%s) - start ))
+          size() { stat -c %s "$1"; }
+          {
+            echo "### SQLCipher build impact (ubuntu-latest, cold build, release, system OpenSSL)"
+            echo
+            echo "| | default | SQLCipher |"
+            echo "|---|---|---|"
+            echo "| build time (service + CLI) | ${default_secs} s | ${cipher_secs} s |"
+            echo "| msgkit-service | $(size target-default/release/msgkit-service) bytes | $(size target-sqlcipher/release/msgkit-service) bytes |"
+            echo "| msgkit (CLI) | $(size target-default/release/msgkit) bytes | $(size target-sqlcipher/release/msgkit) bytes |"
+            echo
+            echo "Dynamic libraries linked by the SQLCipher service binary:"
+            echo '```'
+            ldd target-sqlcipher/release/msgkit-service | sed 's/(0x[0-9a-f]*)//' | awk '{print $1}'
+            echo '```'
+            echo "The default service binary links libssl or libcrypto: $(ldd target-default/release/msgkit-service | grep -c -E 'libssl|libcrypto')"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
   msrv:
     name: Rust MSRV (1.88)
     runs-on: ubuntu-latest

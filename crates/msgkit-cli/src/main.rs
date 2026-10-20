@@ -15,7 +15,7 @@ use msgkit_core::limits::Limits;
 use msgkit_core::store::{write_ndjson, EraseOptions, EraseStore};
 use msgkit_core::whatsapp_export::{self, DateOrder, WhatsAppExportOptions};
 use msgkit_core::{ImportReport, SCHEMA_VERSION};
-use msgkit_store_sqlite::SqliteStore;
+use msgkit_store_sqlite::{cloud_synced_folder, encrypt_database, DbKey, SqliteStore, StoreOptions};
 
 #[derive(Parser)]
 #[command(name = "msgkit", version, about = "Convert message exports to normalized NDJSON")]
@@ -124,8 +124,8 @@ enum StoreAction {
         /// The person's phone number, email address or id.
         #[arg(long, conflicts_with = "address_stdin")]
         address: Option<String>,
-        /// Read the address from the first line of standard input.
-        #[arg(long)]
+        /// Read the address from the first line of standard input (cannot be combined with --key-stdin).
+        #[arg(long, conflicts_with = "key_stdin")]
         address_stdin: bool,
         /// Calling code, e.g. 94, the one the events were imported with.
         #[arg(long)]
@@ -136,13 +136,81 @@ enum StoreAction {
         /// Rebuild the database file afterwards (VACUUM) so no free pages remain.
         #[arg(long)]
         compact: bool,
+        #[command(flatten)]
+        key: KeyArgs,
     },
+    /// Encrypt a plain database once (needs a build with the `sqlcipher` feature).
+    ///
+    /// Stop the service and MAKE A BACKUP of the plain database first. This writes a NEW encrypted file, checks
+    /// that it opens with the key and holds the same rows, and only then overwrites and deletes the plain file
+    /// (unless --keep-plain). Keep the key separately from the database: without it the data cannot be recovered.
+    /// Nothing is converted automatically when a database is opened.
+    Encrypt {
+        /// The plain database file.
+        db: PathBuf,
+        /// Where to write the encrypted copy (must not exist yet). Point MSGKIT_DB_PATH at it afterwards.
+        #[arg(long)]
+        output: PathBuf,
+        /// Keep the plain file instead of overwriting and deleting it after the copy was verified.
+        #[arg(long)]
+        keep_plain: bool,
+        #[command(flatten)]
+        key: KeyArgs,
+    },
+}
+
+/// Where the database key comes from. Never an argument: a command line is visible in process listings and shell
+/// history.
+#[derive(clap::Args)]
+struct KeyArgs {
+    /// A file holding the key: 64 hexadecimal characters (for example `openssl rand -hex 32 > key`). Without this,
+    /// MSGKIT_DB_KEY_FILE names the file.
+    #[arg(long)]
+    key_file: Option<PathBuf>,
+    /// Read the key from the first line of standard input.
+    #[arg(long, conflicts_with = "key_file")]
+    key_stdin: bool,
+}
+
+impl KeyArgs {
+    /// The key, or `None` when none was given. Errors name the setting, never the key.
+    fn read(&self) -> Result<Option<DbKey>, String> {
+        let text = if self.key_stdin {
+            let mut line = String::new();
+            io::stdin()
+                .read_line(&mut line)
+                .map_err(|_| "cannot read the key from standard input".to_owned())?;
+            line
+        } else {
+            let path = match &self.key_file {
+                Some(path) => path.clone(),
+                None => match std::env::var_os("MSGKIT_DB_KEY_FILE").filter(|v| !v.is_empty()) {
+                    Some(path) => PathBuf::from(path),
+                    None => return Ok(None),
+                },
+            };
+            fs::read_to_string(path).map_err(|_| "the key file cannot be read".to_owned())?
+        };
+        DbKey::from_hex(&text)
+            .map(Some)
+            .map_err(|_| "the key must be 64 hexadecimal characters (256 bits)".to_owned())
+    }
+}
+
+/// Warns on stderr when the database sits in a cloud-synced folder.
+fn warn_if_synced(db: &Path) {
+    if let Some(provider) = cloud_synced_folder(db) {
+        eprintln!(
+            "warning: the database is inside a {provider} folder; the sync copies it and its write-ahead log where \
+             msgkit cannot erase them. Use a local path that is not synced"
+        );
+    }
 }
 
 /// Runs a `store` action. Returns the line to print; errors never include the address.
 fn run_store(action: StoreAction) -> Result<String, String> {
     match action {
-        StoreAction::Erase { db, address, address_stdin, default_country_code, drop_ids, compact } => {
+        StoreAction::Erase { db, address, address_stdin, default_country_code, drop_ids, compact, key } => {
             let address = match (address, address_stdin) {
                 (Some(a), false) => a,
                 (None, true) => {
@@ -159,12 +227,31 @@ fn run_store(action: StoreAction) -> Result<String, String> {
             if let Some(code) = default_country_code {
                 opts = opts.with_default_country_code(code);
             }
-            let mut store = SqliteStore::open(&db).map_err(|e| e.to_string())?;
+            warn_if_synced(&db);
+            let mut options = StoreOptions::default();
+            if let Some(key) = key.read()? {
+                options = options.with_key(key);
+            }
+            let mut store = SqliteStore::open_with(&db, &options).map_err(|e| e.to_string())?;
             let erased = store.erase_person(&address, &opts).map_err(|e| e.to_string())?;
             if compact {
                 store.compact().map_err(|e| e.to_string())?;
             }
             Ok(format!("erased {erased} event(s)"))
+        }
+        StoreAction::Encrypt { db, output, keep_plain, key } => {
+            warn_if_synced(&output);
+            let key = key.read()?.ok_or_else(|| "give the key with --key-file or --key-stdin".to_owned())?;
+            let report = encrypt_database(&db, &output, &key, keep_plain).map_err(|e| e.to_string())?;
+            let tail = if report.plain_deleted {
+                "the plain file was overwritten and deleted"
+            } else {
+                "the plain file was kept: delete it yourself once you rely on the encrypted one"
+            };
+            Ok(format!(
+                "encrypted {} row(s) into the new file, verified; {tail}. Back up the key separately from the database",
+                report.rows
+            ))
         }
     }
 }

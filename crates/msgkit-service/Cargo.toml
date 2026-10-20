@@ -16,6 +16,11 @@ workspace = true
 name = "msgkit-service"
 path = "src/main.rs"
 
+[features]
+# Encrypt the database file with SQLCipher (see msgkit-store-sqlite). Off by default.
+sqlcipher = ["msgkit-store-sqlite/sqlcipher"]
+sqlcipher-vendored = ["sqlcipher", "msgkit-store-sqlite/sqlcipher-vendored"]
+
 [dependencies]
 axum = "0.8.9"
 getrandom = "0.4.3"

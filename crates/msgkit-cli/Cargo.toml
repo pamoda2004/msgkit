@@ -16,6 +16,11 @@ workspace = true
 name = "msgkit"
 path = "src/main.rs"
 
+[features]
+# Encrypt the database file with SQLCipher (see msgkit-store-sqlite). Off by default.
+sqlcipher = ["msgkit-store-sqlite/sqlcipher"]
+sqlcipher-vendored = ["sqlcipher", "msgkit-store-sqlite/sqlcipher-vendored"]
+
 [dependencies]
 clap = { version = "4.5.61", features = ["derive"] }
 msgkit-core.workspace = true

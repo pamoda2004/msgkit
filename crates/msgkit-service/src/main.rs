@@ -1,7 +1,9 @@
 use std::net::SocketAddr;
 use std::time::Duration;
 
-use msgkit_service::{check_bind, maintain_database, router, AppState, Config, Maintenance};
+use msgkit_service::{
+    check_bind, cloud_synced_folder, maintain_database, router, AppState, Config, Maintenance,
+};
 use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 
@@ -24,6 +26,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if config.limits.unlimited {
         warn!("MSGKIT_NO_LIMITS is set: input limits are switched off, so a single request can use unbounded memory");
     }
+    if let Some(provider) = config.db_path.as_deref().and_then(cloud_synced_folder) {
+        warn!(
+            "MSGKIT_DB_PATH is inside a {provider} folder: the sync copies the database, its write-ahead log and older \
+             versions to other machines and to the provider, where msgkit cannot erase them. Use a local path that is \
+             not synced"
+        );
+    }
     if config.db_path.is_none() {
         warn!("MSGKIT_DB_PATH is not set: webhook events are kept in memory and lost on restart");
     }
@@ -32,6 +41,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         messenger = config.messenger.is_some(),
         auth = config.api_token.is_some(),
         durable = config.db_path.is_some(),
+        encrypted = config.db_key.is_some(),
         "starting msgkit-service on {bind}"
     );
 

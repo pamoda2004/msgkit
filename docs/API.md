@@ -109,6 +109,8 @@ Configuration (environment):
 | `MSGKIT_WHATSAPP_VERIFY_TOKEN` | handshake token | unset → handshake rejected |
 | `MSGKIT_MESSENGER_APP_SECRET` / `_VERIFY_TOKEN` | same for Messenger | unset |
 | `MSGKIT_DB_PATH` | SQLite file for webhook events | unset → in memory, **lost on restart** |
+| `MSGKIT_DB_KEY_FILE` | path of a file holding the database key (64 hexadecimal characters; for example a Docker secret). Needs a build with the `sqlcipher` feature and `MSGKIT_DB_PATH`; the service refuses to start otherwise, on a plain database, or on an encrypted one without a key. **Losing the key loses the data**; see [ENCRYPTION.md](ENCRYPTION.md) | unset (plain database) |
+| `MSGKIT_DB_KEY` | the key itself, instead of the file: **less safe** (environment variables show up in listings and crash reports). Set only one of the two | unset |
 | `MSGKIT_DEFAULT_COUNTRY_CODE` | calling code (1 to 3 digits, e.g. `94`) used to read national-format phone numbers in `POST /v1/store/erase`; the one your events were imported with. Only the operator sets it | unset (only `+` numbers are recognised as phone numbers) |
 | `MSGKIT_ID_RETENTION_DAYS` | days an acknowledged, erased or expired event id is remembered to reject redelivered webhooks (whole days, 1 to 36500). Ids are pseudonymous personal data; Meta retries for several days, so do not go very low | 30 |
 | `MSGKIT_PENDING_MAX_AGE_DAYS` | erase events that were received this many days ago and never acknowledged (their ids stay for the id retention); whole days, 1 to 36500 | unset (keep until acknowledged) |

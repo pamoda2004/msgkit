@@ -2,7 +2,8 @@ use std::net::SocketAddr;
 use std::time::Duration;
 
 use msgkit_service::{
-    check_bind, cloud_synced_folder, maintain_database, router, AppState, Config, Maintenance,
+    check_bind, cloud_synced_folder, key_file_too_open, maintain_database, router, AppState, Config,
+    Maintenance,
 };
 use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
@@ -31,6 +32,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "MSGKIT_DB_PATH is inside a {provider} folder: the sync copies the database, its write-ahead log and older \
              versions to other machines and to the provider, where msgkit cannot erase them. Use a local path that is \
              not synced"
+        );
+    }
+    if std::env::var_os("MSGKIT_DB_KEY_FILE").is_some_and(|p| key_file_too_open(std::path::Path::new(&p))) {
+        warn!(
+            "the key file named by MSGKIT_DB_KEY_FILE can be read by its group or by other users: restrict it to its \
+             owner (chmod 600)"
         );
     }
     if config.db_path.is_none() {

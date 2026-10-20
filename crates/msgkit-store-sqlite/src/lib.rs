@@ -64,7 +64,7 @@ mod encrypt;
 mod key;
 
 pub use encrypt::{encrypt_database, EncryptReport};
-pub use key::{cloud_synced_folder, DbKey};
+pub use key::{cloud_synced_folder, key_file_too_open, DbKey};
 
 use std::fmt::Display;
 use std::path::Path;

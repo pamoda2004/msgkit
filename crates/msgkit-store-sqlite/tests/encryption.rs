@@ -158,7 +158,7 @@ mod with_sqlcipher {
 
         // The file does not start like SQLite, and neither it nor its log holds any text, sender or id.
         let bytes = disk_bytes(&path);
-        assert!(!bytes.is_empty());
+        assert_ne!(bytes.len(), 0, "the encrypted database has content on disk");
         assert!(!contains(&bytes, MARKER) && !contains(&bytes, "other text 5e2f"));
         assert!(!contains(&bytes, "+94700000000") && !contains(&bytes, "SQLite format 3"));
         drop(store);

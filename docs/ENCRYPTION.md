@@ -34,7 +34,15 @@ cargo build --release -p msgkit-service -p msgkit-cli --features msgkit-service/
 
 ## The key
 
-* **Format:** 64 hexadecimal characters (256 bits), given to SQLCipher as a raw key. Generate one with `openssl rand -hex 32` or `python -c "import secrets; print(secrets.token_hex(32))"`.
+* **Format:** 64 hexadecimal characters (256 bits), given to SQLCipher as a raw key.
+* **Generate it** with a cryptographic random generator and **restrict the file to its owner** in the same step:
+  ```bash
+  umask 077                          # files created from here on are readable by their owner only
+  openssl rand -hex 32 > db.key      # 64 hexadecimal characters
+  chmod 600 db.key                   # make sure, even if the file already existed
+  ```
+  (without OpenSSL: `python -c "import secrets; print(secrets.token_hex(32))" > db.key`). On Windows, keep the file in a folder only your account (and the service account) can read. Do not put it in the repository, in the same folder as the database, or in a cloud-synced folder.
+* **On Unix the service warns at startup, and `msgkit store` warns on stderr, when the key file can be read by its group or by others** (any of the permission bits `0o077`). It is a warning, not a refusal; fix it with `chmod 600`.
 * **Service:** `MSGKIT_DB_KEY_FILE` is the path of a file that holds the key (for Docker or Kubernetes, a secret mounted at `/run/secrets/...`). `MSGKIT_DB_KEY` holds the key itself and is **less safe**: environment variables show up in process listings, crash reports and child processes. Set only one of them; both need `MSGKIT_DB_PATH`.
 * **Command line:** `--key-file <file>` or `--key-stdin`, never an argument (an argument is visible in the process list and the shell history). Without either, `MSGKIT_DB_KEY_FILE` names the file.
 * The key is never logged or printed, `Debug` output shows `<redacted>`, and an error names the setting, not its value.
@@ -66,7 +74,13 @@ Nothing is converted automatically when a database is opened. Do it once, delibe
    ```
    It writes a **new** file, opens it with the key and checks that the layout and every row match, checks that it does not read as plain SQLite, and only then **overwrites the plain file with zeros and deletes it** (and its `-wal` and `-shm`). Add `--keep-plain` to keep it and delete it yourself later. If anything fails, the plain file is untouched and the half-written output is removed.
 5. Point `MSGKIT_DB_PATH` at the new file, set `MSGKIT_DB_KEY_FILE`, and start the service.
-6. Delete the plain **backup** from step 2 when you no longer need it. Overwriting does not reach copies made by a snapshot, a backup, a sync client or an SSD that has remapped its blocks, so the plain backup is the part to destroy carefully (and an encrypted volume makes this easier).
+6. Delete the plain **backup** from step 2 when you no longer need it, with the same care as in the next section.
+
+### What deleting the plain file does not guarantee
+
+`msgkit store encrypt` overwrites the plain file with zeros, syncs it and deletes it. **That cannot guarantee the old bytes are gone from the disk.** An SSD or flash drive spreads writes over spare blocks (wear levelling), so the zeros may land in different physical blocks while the old ones stay until the drive reuses and erases them; copy-on-write and journaling file systems (Btrfs, ZFS, APFS, NTFS with snapshots), file-system snapshots, backups, and sync clients can all keep earlier copies; and the plain backup you made in step 2 is a plain copy by design.
+
+For that reason **use disk or volume encryption as well** (BitLocker, LUKS, FileVault, an encrypted Docker volume), ideally *before* the plain database was ever written there: bytes that were only ever stored encrypted cannot leak this way. If the plain data may have reached a disk you do not control, treat it as exposed.
 
 ## Licences
 

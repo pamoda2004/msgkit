@@ -15,7 +15,9 @@ use msgkit_core::limits::Limits;
 use msgkit_core::store::{write_ndjson, EraseOptions, EraseStore};
 use msgkit_core::whatsapp_export::{self, DateOrder, WhatsAppExportOptions};
 use msgkit_core::{ImportReport, SCHEMA_VERSION};
-use msgkit_store_sqlite::{cloud_synced_folder, encrypt_database, DbKey, SqliteStore, StoreOptions};
+use msgkit_store_sqlite::{
+    cloud_synced_folder, encrypt_database, key_file_too_open, DbKey, SqliteStore, StoreOptions,
+};
 
 #[derive(Parser)]
 #[command(name = "msgkit", version, about = "Convert message exports to normalized NDJSON")]
@@ -145,6 +147,9 @@ enum StoreAction {
     /// that it opens with the key and holds the same rows, and only then overwrites and deletes the plain file
     /// (unless --keep-plain). Keep the key separately from the database: without it the data cannot be recovered.
     /// Nothing is converted automatically when a database is opened.
+    ///
+    /// Deleting the plain file cannot guarantee that its old bytes are gone from the disk, above all on an SSD
+    /// (wear levelling), a snapshot or a backup: use disk or volume encryption as well.
     Encrypt {
         /// The plain database file.
         db: PathBuf,
@@ -189,6 +194,12 @@ impl KeyArgs {
                     None => return Ok(None),
                 },
             };
+            if key_file_too_open(&path) {
+                eprintln!(
+                    "warning: the key file can be read by its group or by other users: restrict it to its owner \
+                     (chmod 600)"
+                );
+            }
             fs::read_to_string(path).map_err(|_| "the key file cannot be read".to_owned())?
         };
         DbKey::from_hex(&text)

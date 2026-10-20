@@ -35,7 +35,7 @@ use msgkit_core::limits::Limits;
 use msgkit_core::store::{EraseOptions, EraseStore, EventStore, MemoryStore, RetentionStore};
 use msgkit_core::whatsapp_export::{self, WhatsAppExportOptions};
 use msgkit_core::{webhook, Event, ImportReport, SCHEMA_VERSION};
-pub use msgkit_store_sqlite::cloud_synced_folder;
+pub use msgkit_store_sqlite::{cloud_synced_folder, key_file_too_open};
 use msgkit_store_sqlite::{DbKey, SqliteStore, StoreOptions, DEFAULT_RETENTION};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;

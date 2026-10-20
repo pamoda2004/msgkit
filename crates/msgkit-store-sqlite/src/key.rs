@@ -60,6 +60,29 @@ impl fmt::Debug for DbKey {
     }
 }
 
+/// Whether a key file can be read by its group or by others (Unix permission bits `0o077`). Always `false` where
+/// there are no such bits (Windows) or the file cannot be examined. A key file should be readable by its owner only
+/// (`chmod 600`); this is meant for a warning, never for a refusal.
+///
+/// ```
+/// use msgkit_store_sqlite::key_file_too_open;
+///
+/// assert!(!key_file_too_open(std::path::Path::new("/no/such/key")));
+/// ```
+#[must_use]
+pub fn key_file_too_open(path: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::metadata(path).is_ok_and(|m| m.permissions().mode() & 0o077 != 0)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+        false
+    }
+}
+
 /// Which cloud-sync client's folder `path` is inside, by the names of its directories, or `None`.
 ///
 /// A production database must not live in such a folder: the sync copies the file, its write-ahead log and every
@@ -128,6 +151,23 @@ mod tests {
         }
         let shown = format!("{:?}", DbKey::from_hex(&key).unwrap());
         assert!(!shown.contains("0123"), "{shown}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_key_file_open_to_group_or_others_is_noticed() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("msgkit-keyperm-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("db.key");
+        std::fs::write(&path, "x").unwrap();
+        for (mode, open) in
+            [(0o600, false), (0o400, false), (0o640, true), (0o604, true), (0o644, true), (0o666, true)]
+        {
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode)).unwrap();
+            assert_eq!(key_file_too_open(&path), open, "{mode:o}");
+        }
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

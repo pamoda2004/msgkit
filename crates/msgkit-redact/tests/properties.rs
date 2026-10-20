@@ -86,6 +86,25 @@ proptest! {
     }
 
     #[test]
+    fn keywords_digits_and_placeholders_in_any_order_stay_idempotent(
+        parts in proptest::collection::vec(
+            proptest::sample::select(&[
+                "account", "Account number:", "a/c", "acct no", "100200300400", "0700000000", "+94700000000",
+                "1234 5698 7654 31", "4111 1111 1111 1111", "850010000V", "198500100000", "Rs.", "km", "|", ",",
+                " ", "  ", "\n\n", "[ACCOUNT]", "[PHONE]", "x", "6500000", "GB82 WEST 1234 5698 7654 32",
+            ][..]),
+            0..14,
+        ),
+        separator in proptest::sample::select(&[" ", "", ", ", "\n"][..]),
+    ) {
+        let text = parts.join(separator);
+        for r in redactors() {
+            let once = r.redact_text(&text);
+            prop_assert_eq!(r.redact_text(&once.text).text, once.text);
+        }
+    }
+
+    #[test]
     fn digit_runs_next_to_words_do_not_break_anything(text in "[a-z0-9 +()./@-]{0,200}") {
         for r in redactors() {
             let once = r.redact_text(&text);

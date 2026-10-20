@@ -40,6 +40,9 @@ pub use event::Summary;
 
 use detect::Detector;
 
+/// A guard on the number of masking passes (two or three are ever needed).
+const MAX_PASSES: usize = 8;
+
 /// One thing found in a text: what, where (byte offsets into the input) and how sure. It never holds the text itself.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Finding {
@@ -58,17 +61,21 @@ pub struct Finding {
 pub struct Redacted {
     /// The text with every finding replaced by its mask.
     pub text: String,
-    /// The findings, in order of position, with offsets into the **original** text.
+    /// The findings of the first pass, in order of position, with offsets into the **original** text.
     pub findings: Vec<Finding>,
+    /// The kinds found by later passes, without positions. Masking a value can expose its neighbour (a number glued
+    /// to an IBAN has no word boundary until the number is masked), so the text is masked again until nothing more
+    /// is found; that is what makes redacting twice change nothing. Almost always empty.
+    pub later: Vec<Kind>,
 }
 
 impl Redacted {
-    /// How many findings of each kind.
+    /// How many findings of each kind, from every pass.
     #[must_use]
     pub fn counts(&self) -> BTreeMap<Kind, usize> {
         let mut counts = BTreeMap::new();
-        for f in &self.findings {
-            *counts.entry(f.kind).or_insert(0) += 1;
+        for kind in self.findings.iter().map(|f| f.kind).chain(self.later.iter().copied()) {
+            *counts.entry(kind).or_insert(0) += 1;
         }
         counts
     }
@@ -116,22 +123,38 @@ impl Redactor {
 
     /// Masks every identifier found in `text`.
     ///
-    /// Redacting an already redacted text changes nothing: a placeholder is never found again.
+    /// Redacting an already redacted text changes nothing: a placeholder is never found again, and the text is masked
+    /// again until a pass finds nothing (see [`Redacted::later`]).
     #[must_use]
     pub fn redact_text(&self, text: &str) -> Redacted {
-        let hits = self.detector.find(text);
-        let mut out = String::with_capacity(text.len());
-        let mut at = 0;
-        for h in &hits {
-            out.push_str(&text[at..h.start]);
-            out.push_str(&self.mask_value(h.kind, &text[h.start..h.end]));
-            at = h.end;
+        let mut current = text.to_owned();
+        let mut first: Vec<Finding> = Vec::new();
+        let mut later: Vec<Kind> = Vec::new();
+        // Every pass removes matched characters and adds placeholders that are not matched again, so the loop ends
+        // after a few passes; the limit only guards against a bug.
+        for pass in 0..MAX_PASSES {
+            let hits = self.detector.find(&current);
+            if hits.is_empty() {
+                break;
+            }
+            let mut out = String::with_capacity(current.len());
+            let mut at = 0;
+            for h in &hits {
+                out.push_str(&current[at..h.start]);
+                out.push_str(&self.mask_value(h.kind, &current[h.start..h.end]));
+                at = h.end;
+            }
+            out.push_str(&current[at..]);
+            if pass == 0 {
+                first = hits
+                    .iter()
+                    .map(|h| Finding { kind: h.kind, start: h.start, end: h.end, confidence: h.confidence })
+                    .collect();
+            } else {
+                later.extend(hits.iter().map(|h| h.kind));
+            }
+            current = out;
         }
-        out.push_str(&text[at..]);
-        let findings = hits
-            .into_iter()
-            .map(|h| Finding { kind: h.kind, start: h.start, end: h.end, confidence: h.confidence })
-            .collect();
-        Redacted { text: out, findings }
+        Redacted { text: current, findings: first, later }
     }
 }

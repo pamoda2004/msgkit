@@ -512,13 +512,20 @@ impl Detector {
 
     fn accounts(&self, text: &str, hits: &mut Vec<Hit>) {
         let Some(keywords) = &self.keywords else { return };
+        let placeholders: Vec<(usize, usize)> =
+            self.placeholder.find_iter(text).map(|m| (m.start(), m.end())).collect();
         for k in keywords.find_iter(text) {
-            if !boundary_before(text, k.start()) || !boundary_after(text, k.end()) {
+            // The word "ACCOUNT" inside a placeholder this crate wrote is not a keyword.
+            let in_placeholder = placeholders.iter().any(|&(s, e)| k.start() < e && s < k.end());
+            if in_placeholder || !boundary_before(text, k.start()) || !boundary_after(text, k.end()) {
                 continue;
             }
             let window_end = floor_boundary(text, k.end() + 60);
             let window = &text[k.end()..window_end];
             let window = window.split("\n\n").next().unwrap_or(window);
+            // The keyword's context ends at a placeholder: once its number is masked the keyword must not reach
+            // further than it did, or redacting a second time would find a second number (the fuzzer found this).
+            let window = self.placeholder.find(window).map_or(window, |m| &window[..m.start()]);
             for run in self.digit_run.find_iter(window) {
                 let (start, end) = (k.end() + run.start(), k.end() + run.end());
                 let digits = digits_of(run.as_str());

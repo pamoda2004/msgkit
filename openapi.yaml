@@ -134,6 +134,53 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/HostNotAllowed" }
         "500": { $ref: "#/components/responses/Error" }
+  /v1/store/erase:
+    post:
+      summary: Erase every held event that involves one person
+      description: >
+        Requires the bearer token, and is off (503, `not_configured`) on a service without `MSGKIT_API_TOKEN`, even on
+        loopback. The address goes in the body only, never in the URL. It is matched the way the importers normalise
+        participants: a phone number in any spelling (`0700000000`, `070 000 0000`, `+94700000000`) when the
+        operator set `MSGKIT_DEFAULT_COUNTRY_CODE`, otherwise only `+` numbers; anything else trimmed and
+        case-insensitive. A client cannot send a country code (unknown fields are refused). Every held (not yet
+        acknowledged) event in which the person is the sender, a recipient or a call participant loses its content;
+        the ids stay (30 days, `MSGKIT_ID_RETENTION_DAYS`) unless `drop_ids` is true. The answer and the server log
+        carry counts, a request id and a UTC time, never the address, so an operator can show a request was handled.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [address]
+              additionalProperties: false
+              properties:
+                address: { type: string, minLength: 1, maxLength: 256, description: "Phone number, email address or platform id (trimmed; at most 256 characters)." }
+                drop_ids: { type: boolean, default: false, description: "Also forget the ids of the erased events, so a redelivered message would be accepted again." }
+      responses:
+        "200":
+          description: Counts only. An address that matches nothing returns `erased: 0`.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [erased, request_id, handled_at]
+                properties:
+                  erased: { type: integer, description: Events erased. }
+                  request_id: { type: string, description: "32 lower-case hex characters, also in the server log line." }
+                  handled_at: { type: string, format: date-time, description: "UTC, to the second." }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+        "500": { $ref: "#/components/responses/Error" }
+        "501":
+          description: The service's store cannot erase a person (code `not_supported`).
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "503":
+          description: The service has no `MSGKIT_API_TOKEN` (code `not_configured`).
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
   /webhooks/whatsapp:
     get:
       summary: Meta subscription handshake
@@ -223,4 +270,4 @@ components:
       required: [error, code]
       properties:
         error: { type: string, description: Text for people; may be reworded in any release. }
-        code: { type: string, description: "Stable error code (docs/ERRORS.md); treat a code you do not know as a generic failure. Codes: `invalid_input`, `parse_error`, `unknown_op`, `storage_error`, `internal_error`, `limit_exceeded`, `unauthorized`, `signature_invalid`, `verification_failed`, `not_configured`, `host_not_allowed`." }
+        code: { type: string, description: "Stable error code (docs/ERRORS.md); treat a code you do not know as a generic failure. Codes: `invalid_input`, `parse_error`, `unknown_op`, `storage_error`, `internal_error`, `limit_exceeded`, `unauthorized`, `signature_invalid`, `verification_failed`, `not_configured`, `host_not_allowed`, `not_supported`." }

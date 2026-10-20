@@ -32,7 +32,7 @@ use msgkit_core::device::{self, DeviceBatch, DeviceOptions};
 use msgkit_core::error::codes;
 use msgkit_core::facebook::{self, FacebookExportOptions};
 use msgkit_core::limits::Limits;
-use msgkit_core::store::{EventStore, MemoryStore, RetentionStore};
+use msgkit_core::store::{EraseOptions, EraseStore, EventStore, MemoryStore, RetentionStore};
 use msgkit_core::whatsapp_export::{self, WhatsAppExportOptions};
 use msgkit_core::{webhook, Event, ImportReport, SCHEMA_VERSION};
 use msgkit_store_sqlite::{SqliteStore, DEFAULT_RETENTION};
@@ -92,6 +92,27 @@ pub struct Config {
     /// [`id_retention`](Self::id_retention)). `None`, the default, keeps them until a consumer acknowledges them.
     /// `MSGKIT_PENDING_MAX_AGE_DAYS`.
     pub pending_max_age: Option<Duration>,
+    /// The calling code (digits, e.g. `94`) used to read national-format phone numbers in an erase request, the
+    /// one the events were imported with. Set by the operator only (`MSGKIT_DEFAULT_COUNTRY_CODE`); a request
+    /// cannot send one, so clients use `+` numbers for other countries.
+    pub default_country_code: Option<String>,
+}
+
+/// `MSGKIT_DEFAULT_COUNTRY_CODE`: a calling code of one to three digits, with or without a leading `+`.
+fn country_code_var(get: &dyn Fn(&str) -> Option<String>) -> Result<Option<String>, String> {
+    let Some(raw) = get("MSGKIT_DEFAULT_COUNTRY_CODE").filter(|v| !v.trim().is_empty()) else {
+        return Ok(None);
+    };
+    let digits = raw.trim();
+    let digits = digits.strip_prefix('+').unwrap_or(digits);
+    if (1..=3).contains(&digits.len())
+        && digits.chars().all(|c| c.is_ascii_digit())
+        && !digits.starts_with('0')
+    {
+        Ok(Some(digits.to_owned()))
+    } else {
+        Err("MSGKIT_DEFAULT_COUNTRY_CODE must be a calling code of 1 to 3 digits, for example 94".to_owned())
+    }
 }
 
 /// The longest retention an environment variable may ask for, in days (a century): it keeps the arithmetic safe.
@@ -169,7 +190,8 @@ impl Config {
     /// A message when `MSGKIT_MAX_INPUT_BYTES`, `MSGKIT_MAX_LINE_BYTES`, `MSGKIT_MAX_MESSAGES` or
     /// `MSGKIT_MAX_JSON_DEPTH` is not a whole number of at least 1, `MSGKIT_NO_LIMITS` is not `true` or `false`, an
     /// entry of `MSGKIT_ALLOWED_HOSTS` is not a plain host name or address, or `MSGKIT_ID_RETENTION_DAYS` or
-    /// `MSGKIT_PENDING_MAX_AGE_DAYS` is not a whole number of days from 1 to 36500.
+    /// `MSGKIT_PENDING_MAX_AGE_DAYS` is not a whole number of days from 1 to 36500, or `MSGKIT_DEFAULT_COUNTRY_CODE`
+    /// is not a calling code of 1 to 3 digits.
     pub fn try_from_env() -> Result<Self, String> {
         let limits = limits_from(&|name| std::env::var(name).ok())?;
         let allowed_hosts = allowed_hosts_from(&|name| std::env::var(name).ok())?;
@@ -177,6 +199,7 @@ impl Config {
         let mut config = Self::from_env().with_limits(limits).with_allowed_hosts(allowed_hosts);
         config.id_retention = days_var(&get, "MSGKIT_ID_RETENTION_DAYS")?;
         config.pending_max_age = days_var(&get, "MSGKIT_PENDING_MAX_AGE_DAYS")?;
+        config.default_country_code = country_code_var(&get)?;
         Ok(config)
     }
 
@@ -184,6 +207,14 @@ impl Config {
     #[must_use]
     pub fn with_id_retention(mut self, retention: Duration) -> Self {
         self.id_retention = Some(retention);
+        self
+    }
+
+    /// Sets [`default_country_code`](Self::default_country_code) (digits, with or without a leading `+`).
+    #[must_use]
+    pub fn with_default_country_code(mut self, code: impl AsRef<str>) -> Self {
+        let code = code.as_ref().trim();
+        self.default_country_code = Some(code.strip_prefix('+').unwrap_or(code).to_owned());
         self
     }
 
@@ -265,6 +296,7 @@ impl Config {
             allowed_hosts: Vec::new(),
             id_retention: None,
             pending_max_age: None,
+            default_country_code: None,
         }
     }
 }
@@ -339,7 +371,33 @@ async fn require_allowed_host(State(state): State<AppState>, req: Request, next:
     next.run(req).await
 }
 
-type SharedStore = Arc<Mutex<Box<dyn EventStore + Send>>>;
+/// The store behind the service. The two built-in stores can erase a person; a store handed in with
+/// [`AppState::with_store`] only has to be an [`EventStore`], so it cannot (`not_supported`).
+enum Backend {
+    Memory(MemoryStore),
+    Sqlite(SqliteStore),
+    Custom(Box<dyn EventStore + Send>),
+}
+
+impl Backend {
+    fn events(&mut self) -> &mut dyn EventStore {
+        match self {
+            Backend::Memory(s) => s,
+            Backend::Sqlite(s) => s,
+            Backend::Custom(s) => s.as_mut(),
+        }
+    }
+
+    fn eraser(&mut self) -> Option<&mut dyn EraseStore> {
+        match self {
+            Backend::Memory(s) => Some(s),
+            Backend::Sqlite(s) => Some(s),
+            Backend::Custom(_) => None,
+        }
+    }
+}
+
+type SharedStore = Arc<Mutex<Backend>>;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -359,21 +417,22 @@ impl AppState {
     /// otherwise using an in-memory store.
     pub fn new(config: Config) -> msgkit_core::Result<Self> {
         config.limits.validate()?;
-        let store: Box<dyn EventStore + Send> = match &config.db_path {
+        let store = match &config.db_path {
             Some(path) => {
                 let mut db = SqliteStore::open(path)?;
                 maintain(&mut db, &config)?;
-                Box::new(db)
+                Backend::Sqlite(db)
             }
-            None => Box::new(MemoryStore::new()),
+            None => Backend::Memory(MemoryStore::new()),
         };
-        Ok(Self::with_store(config, store))
+        Ok(AppState { config: Arc::new(config), store: Arc::new(Mutex::new(store)) })
     }
 
-    /// Uses a caller-provided store (any [`EventStore`] implementation).
+    /// Uses a caller-provided store (any [`EventStore`] implementation). Such a store cannot be asked to erase a
+    /// person: `POST /v1/store/erase` answers `501 not_supported`.
     #[must_use]
     pub fn with_store(config: Config, store: Box<dyn EventStore + Send>) -> Self {
-        AppState { config: Arc::new(config), store: Arc::new(Mutex::new(store)) }
+        AppState { config: Arc::new(config), store: Arc::new(Mutex::new(Backend::Custom(store))) }
     }
 
     /// Runs `f` on the store on a blocking thread, so disk I/O never stalls
@@ -385,15 +444,38 @@ impl AppState {
         let store = Arc::clone(&self.store);
         let result = blocking(move || {
             let mut guard = store.lock().unwrap_or_else(PoisonError::into_inner);
-            f(guard.as_mut())
+            f(guard.events())
         })
         .await?;
-        result.map_err(|e| {
-            // Details stay in the log; clients get a generic message.
-            tracing::error!("storage failure: {e}");
-            ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "storage error", codes::STORAGE_ERROR)
-        })
+        result.map_err(|e| storage_failure(&e))
     }
+
+    /// Like [`with_store_blocking`](Self::with_store_blocking), for an operation only an [`EraseStore`] can do.
+    async fn with_eraser_blocking<T: Send + 'static>(
+        &self,
+        f: impl FnOnce(&mut dyn EraseStore) -> msgkit_core::Result<T> + Send + 'static,
+    ) -> Result<T, ApiError> {
+        let store = Arc::clone(&self.store);
+        let result = blocking(move || {
+            let mut guard = store.lock().unwrap_or_else(PoisonError::into_inner);
+            guard.eraser().map(f)
+        })
+        .await?;
+        match result {
+            Some(result) => result.map_err(|e| storage_failure(&e)),
+            None => Err(ApiError::new(
+                StatusCode::NOT_IMPLEMENTED,
+                "this service's store cannot erase a person",
+                codes::NOT_SUPPORTED,
+            )),
+        }
+    }
+}
+
+/// A storage failure. Details stay in the log; clients get a generic message.
+fn storage_failure(e: &msgkit_core::Error) -> ApiError {
+    tracing::error!("storage failure: {e}");
+    ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "storage error", codes::STORAGE_ERROR)
 }
 
 /// Forgets acknowledged event ids older than the default retention window (30 days). Safe to
@@ -635,6 +717,81 @@ async fn acknowledge(
     Ok(Json(json!({ "acknowledged": n })))
 }
 
+/// The most an erase request body may hold: an address, a flag and some JSON.
+const ERASE_BODY_LIMIT: usize = 4096;
+/// The longest address accepted, in characters.
+const MAX_ADDRESS_CHARS: usize = 256;
+
+/// `{"address": "<phone number, email address or id>", "drop_ids": false}`. Unknown fields are refused, so a
+/// client cannot pass `default_country_code` (only the operator sets it) or any other option.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct EraseRequest {
+    address: String,
+    #[serde(default)]
+    drop_ids: bool,
+}
+
+/// Erasing personal data must never be open: without `MSGKIT_API_TOKEN` the endpoint answers `503`, even on
+/// loopback, and does not read the body.
+async fn require_erase_enabled(State(state): State<AppState>, req: Request, next: Next) -> Response {
+    if state.config.api_token.is_none() {
+        return ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "erasing a person needs MSGKIT_API_TOKEN to be set",
+            codes::NOT_CONFIGURED,
+        )
+        .into_response();
+    }
+    next.run(req).await
+}
+
+/// 16 random bytes as 32 lower-case hex characters.
+fn new_request_id() -> Result<String, ApiError> {
+    use std::fmt::Write as _;
+    let mut bytes = [0_u8; 16];
+    getrandom::fill(&mut bytes).map_err(|_| {
+        ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "worker failed", codes::INTERNAL_ERROR)
+    })?;
+    Ok(bytes.iter().fold(String::with_capacity(32), |mut s, b| {
+        let _ = write!(s, "{b:02x}");
+        s
+    }))
+}
+
+/// The current UTC time, to the second, as `2026-10-20T12:00:00Z`.
+fn utc_now() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(0));
+    chrono::DateTime::from_timestamp(secs, 0)
+        .map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Secs, true))
+        .unwrap_or_default()
+}
+
+/// Erases every held event in which the person is the sender, a recipient or a call participant. The answer and
+/// the log line carry counts, a request id and a UTC time, never the address.
+async fn erase(
+    State(state): State<AppState>,
+    AppJson(req): AppJson<EraseRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let chars = req.address.trim().chars().count();
+    if !(1..=MAX_ADDRESS_CHARS).contains(&chars) {
+        return Err(rejected(StatusCode::BAD_REQUEST, "the address must be 1 to 256 characters"));
+    }
+    let request_id = new_request_id()?;
+    let drop_ids = req.drop_ids;
+    let mut options = EraseOptions::default().with_drop_ids(drop_ids);
+    if let Some(code) = &state.config.default_country_code {
+        options = options.with_default_country_code(code.clone());
+    }
+    let address = req.address;
+    let erased = state.with_eraser_blocking(move |s| s.erase_person(&address, &options)).await?;
+    let handled_at = utc_now();
+    tracing::info!(%request_id, %handled_at, erased, drop_ids, "erase request handled");
+    Ok(Json(json!({ "erased": erased, "request_id": request_id, "handled_at": handled_at })))
+}
+
 #[derive(Deserialize)]
 struct VerifyQuery {
     #[serde(rename = "hub.mode")]
@@ -751,6 +908,12 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/import/device", post(import_device).layer(DefaultBodyLimit::max(import_limit)))
         .route("/v1/events", get(events))
         .route("/v1/events/ack", post(acknowledge))
+        .route(
+            "/v1/store/erase",
+            post(erase)
+                .layer(DefaultBodyLimit::max(ERASE_BODY_LIMIT))
+                .layer(middleware::from_fn_with_state(state.clone(), require_erase_enabled)),
+        )
         .route("/v1/version", get(version))
         .layer(middleware::from_fn_with_state(state.clone(), require_token))
         .layer(middleware::from_fn_with_state(state.clone(), require_allowed_host));
@@ -976,5 +1139,28 @@ mod tests {
         let mut db = SqliteStore::open(&path).unwrap();
         assert!(!db.insert(sample_event("held", 1)).unwrap(), "the expired event's id is kept");
         assert!(db.insert(sample_event("done", 2)).unwrap(), "the forgotten id is accepted again");
+    }
+
+    #[test]
+    fn the_country_code_is_one_to_three_digits() {
+        let get = |value: &'static str| {
+            move |name: &str| (name == "MSGKIT_DEFAULT_COUNTRY_CODE").then(|| value.to_owned())
+        };
+        assert_eq!(country_code_var(&env(&[])).unwrap(), None);
+        assert_eq!(country_code_var(&get("")).unwrap(), None);
+        assert_eq!(country_code_var(&get("94")).unwrap().as_deref(), Some("94"));
+        assert_eq!(country_code_var(&get(" +94 ")).unwrap().as_deref(), Some("94"));
+        assert_eq!(country_code_var(&get("1")).unwrap().as_deref(), Some("1"));
+        for bad in ["0", "094", "9499", "9 4", "sri-lanka", "+", "++94", "94a"] {
+            let e = country_code_var(&get(bad)).unwrap_err();
+            assert_eq!(
+                e,
+                "MSGKIT_DEFAULT_COUNTRY_CODE must be a calling code of 1 to 3 digits, for example 94"
+            );
+        }
+        assert_eq!(
+            Config::default().with_default_country_code("+94").default_country_code.as_deref(),
+            Some("94")
+        );
     }
 }

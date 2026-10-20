@@ -113,3 +113,131 @@ fn a_missing_or_empty_address_and_a_missing_database_are_errors_that_do_not_echo
     assert_eq!(SqliteStore::open(&db).unwrap().len().unwrap(), 3);
     assert!(!dir.path().join("nope.db").exists());
 }
+
+// ---- encryption ------------------------------------------------------------------------------------------
+
+const KEY: &str = "abababababababababababababababababababababababababababababababab";
+
+fn key_file(dir: &Path) -> std::path::PathBuf {
+    let path = dir.join("db.key");
+    std::fs::write(&path, format!("{KEY}\n")).unwrap();
+    path
+}
+
+#[test]
+fn a_bad_key_is_refused_without_repeating_it_and_the_key_never_comes_from_an_argument() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("msgkit.db");
+    database(&db);
+    let bad = dir.path().join("bad.key");
+    std::fs::write(&bad, "not-a-key-SECRET").unwrap();
+    let path = db.to_str().unwrap();
+
+    let out = msgkit(
+        &["store", "erase", path, "--address", "+94700000000", "--key-file", bad.to_str().unwrap()],
+        None,
+    );
+    assert!(!out.status.success());
+    assert!(text(&out).contains("64 hexadecimal"), "{}", text(&out));
+    assert!(!text(&out).contains("SECRET"), "{}", text(&out));
+
+    let missing =
+        msgkit(&["store", "erase", path, "--address", "+94700000000", "--key-file", "/no/such/key"], None);
+    assert!(!missing.status.success() && text(&missing).contains("key file cannot be read"));
+
+    // There is no `--key` argument, and the two standard-input flags cannot be combined.
+    assert!(!msgkit(&["store", "erase", path, "--address", "x", "--key", KEY], None).status.success());
+    let both = msgkit(&["store", "erase", path, "--address-stdin", "--key-stdin"], Some("x\n"));
+    assert!(!both.status.success());
+    assert_eq!(SqliteStore::open(&db).unwrap().len().unwrap(), 3, "nothing was erased");
+}
+
+#[test]
+fn erasing_with_a_key_on_a_plain_database_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("msgkit.db");
+    database(&db);
+    let key = key_file(dir.path());
+    let out = msgkit(
+        &[
+            "store",
+            "erase",
+            db.to_str().unwrap(),
+            "--address",
+            "+94700000000",
+            "--key-file",
+            key.to_str().unwrap(),
+        ],
+        None,
+    );
+    assert!(!out.status.success());
+    assert!(!text(&out).contains(KEY), "{}", text(&out));
+    assert_eq!(SqliteStore::open(&db).unwrap().len().unwrap(), 3);
+}
+
+#[cfg(not(feature = "sqlcipher"))]
+#[test]
+fn encrypting_with_a_build_that_cannot_encrypt_fails_and_keeps_the_plain_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("msgkit.db");
+    database(&db);
+    let key = key_file(dir.path());
+    let out_path = dir.path().join("encrypted.db");
+    let out = msgkit(
+        &[
+            "store",
+            "encrypt",
+            db.to_str().unwrap(),
+            "--output",
+            out_path.to_str().unwrap(),
+            "--key-file",
+            key.to_str().unwrap(),
+        ],
+        None,
+    );
+    assert!(!out.status.success());
+    assert!(text(&out).contains("no SQLCipher support"), "{}", text(&out));
+    assert!(!out_path.exists());
+    assert_eq!(SqliteStore::open(&db).unwrap().len().unwrap(), 3);
+}
+
+#[cfg(feature = "sqlcipher")]
+#[test]
+fn encrypt_then_erase_with_the_key_from_a_file_or_from_standard_input() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("msgkit.db");
+    database(&db);
+    let key = key_file(dir.path());
+    let encrypted = dir.path().join("encrypted.db");
+
+    let out = msgkit(
+        &["store", "encrypt", db.to_str().unwrap(), "--output", encrypted.to_str().unwrap(), "--key-stdin"],
+        Some(&format!("{KEY}\n")),
+    );
+    assert!(out.status.success(), "{}", text(&out));
+    assert!(
+        text(&out).contains("encrypted 3 row(s)") && text(&out).contains("overwritten and deleted"),
+        "{}",
+        text(&out)
+    );
+    assert!(!text(&out).contains(KEY));
+    assert!(!db.exists(), "the plain database was removed after the copy was verified");
+
+    // Without the key the encrypted file is refused; with it, erase works.
+    let refused = msgkit(&["store", "erase", encrypted.to_str().unwrap(), "--address", "+94700000000"], None);
+    assert!(!refused.status.success() && text(&refused).contains("MSGKIT_DB_KEY_FILE"), "{}", text(&refused));
+    let ok = msgkit(
+        &[
+            "store",
+            "erase",
+            encrypted.to_str().unwrap(),
+            "--address",
+            "+94700000000",
+            "--key-file",
+            key.to_str().unwrap(),
+        ],
+        None,
+    );
+    assert!(ok.status.success(), "{}", text(&ok));
+    assert_eq!(String::from_utf8_lossy(&ok.stdout).trim(), "erased 2 event(s)");
+}

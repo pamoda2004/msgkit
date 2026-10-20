@@ -65,6 +65,7 @@ The `normalize_*_webhook` operations do not verify signatures; verify first.
 |---|---|
 | `SqliteStore::{open, open_in_memory, prune_acknowledged}` and its `EventStore` implementation | Stable |
 | `POST /v1/store/erase` (request `address`, `drop_ids`; answer `erased`, `request_id`, `handled_at`) | Unstable until a release has used it |
+| `DbKey`, `StoreOptions::key` / `with_key`, `encrypt_database`, `EncryptReport`, `cloud_synced_folder`, and the cargo features `sqlcipher` and `sqlcipher-vendored` (of `msgkit-store-sqlite`, `msgkit-service` and `msgkit-cli`) | Unstable until a release has used them |
 | `SqliteStore::{open_with, open_in_memory_with, checkpoint, compact}`, `StoreOptions`, and the `EraseStore` and `RetentionStore` implementations | Unstable until a release has used them |
 | `DEFAULT_RETENTION` | Stable |
 | Database file layout | Unstable: do not read or write the file yourself. |

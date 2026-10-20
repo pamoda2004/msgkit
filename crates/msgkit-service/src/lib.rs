@@ -33,6 +33,7 @@ use msgkit_core::error::codes;
 use msgkit_core::facebook::{self, FacebookExportOptions};
 use msgkit_core::limits::Limits;
 use msgkit_core::store::{EraseOptions, EraseStore, EventStore, MemoryStore, RetentionStore};
+use msgkit_core::webhook::{Freshness, ReplayPolicy};
 use msgkit_core::whatsapp_export::{self, WhatsAppExportOptions};
 use msgkit_core::{webhook, Event, ImportReport, SCHEMA_VERSION};
 pub use msgkit_store_sqlite::{cloud_synced_folder, key_file_too_open};
@@ -102,6 +103,13 @@ pub struct Config {
     /// is set and the build cannot encrypt, if the database is plain, or if the database is encrypted and there is
     /// no key. Never shown by `Debug`, never logged. Losing the key loses the data.
     pub db_key: Option<DbKey>,
+    /// Replay protection for webhooks (`MSGKIT_REPLAY_PROTECTION`): off by default. The server clock must be
+    /// synchronised (NTP). `enforce` can drop a real message that arrives late; run `log` first and check
+    /// `would_drop`. See `docs/API.md`.
+    pub replay_protection: ReplayMode,
+    /// The oldest a webhook event may be when protection is on (`MSGKIT_REPLAY_WINDOW_HOURS`). `None` is
+    /// [`ReplayPolicy::DEFAULT_WINDOW`] (8 days, Meta's longest retry plus a day).
+    pub replay_window: Option<Duration>,
 }
 
 /// `MSGKIT_DB_KEY_FILE` (the path of a file holding the key, for example a Docker secret) or `MSGKIT_DB_KEY` (the key
@@ -146,6 +154,42 @@ fn country_code_var(get: &dyn Fn(&str) -> Option<String>) -> Result<Option<Strin
 
 /// The longest retention an environment variable may ask for, in days (a century): it keeps the arithmetic safe.
 const MAX_RETENTION_DAYS: u64 = 36_500;
+
+/// What to do with a webhook event whose timestamp is outside the replay window (`MSGKIT_REPLAY_PROTECTION`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ReplayMode {
+    /// No check: every signed delivery is processed, as before. The default.
+    #[default]
+    Off,
+    /// Count and log the events that enforcement would drop, and drop nothing. Run this first.
+    Log,
+    /// Drop the events outside the window (the answer is still `200`, with counts).
+    Enforce,
+}
+
+/// The longest replay window an environment variable may ask for, in hours (a year).
+const MAX_REPLAY_WINDOW_HOURS: u64 = 8760;
+
+/// `MSGKIT_REPLAY_PROTECTION`: `off`, `log` or `enforce` (case and surrounding spaces ignored; unset or empty is off).
+fn replay_mode_from(get: &dyn Fn(&str) -> Option<String>) -> Result<ReplayMode, String> {
+    match get("MSGKIT_REPLAY_PROTECTION").map(|v| v.trim().to_ascii_lowercase()).as_deref() {
+        None | Some("" | "off") => Ok(ReplayMode::Off),
+        Some("log") => Ok(ReplayMode::Log),
+        Some("enforce") => Ok(ReplayMode::Enforce),
+        Some(_) => Err("MSGKIT_REPLAY_PROTECTION must be off, log or enforce".to_owned()),
+    }
+}
+
+/// `MSGKIT_REPLAY_WINDOW_HOURS`: a whole number of hours from 1 to 8760. Unset or empty is `None`.
+fn replay_window_from(get: &dyn Fn(&str) -> Option<String>) -> Result<Option<Duration>, String> {
+    let name = "MSGKIT_REPLAY_WINDOW_HOURS";
+    let Some(raw) = get(name).filter(|v| !v.trim().is_empty()) else { return Ok(None) };
+    match raw.trim().parse::<u64>() {
+        Ok(n) if (1..=MAX_REPLAY_WINDOW_HOURS).contains(&n) => Ok(Some(Duration::from_secs(n * 3600))),
+        _ => Err(format!("{name} must be a whole number of hours from 1 to {MAX_REPLAY_WINDOW_HOURS}")),
+    }
+}
 
 /// Reads one `MSGKIT_*_DAYS` value: a whole number of days from 1 to 36500. Unset or empty is `None`.
 fn days_var(get: &dyn Fn(&str) -> Option<String>, name: &str) -> Result<Option<Duration>, String> {
@@ -232,6 +276,13 @@ impl Config {
         config.pending_max_age = days_var(&get, "MSGKIT_PENDING_MAX_AGE_DAYS")?;
         config.default_country_code = country_code_var(&get)?;
         config.db_key = db_key_from(&get, &|path| std::fs::read_to_string(path))?;
+        config.replay_protection = replay_mode_from(&get)?;
+        config.replay_window = replay_window_from(&get)?;
+        if config.replay_window.is_some() && config.replay_protection == ReplayMode::Off {
+            return Err(
+                "MSGKIT_REPLAY_WINDOW_HOURS needs MSGKIT_REPLAY_PROTECTION to be log or enforce".to_owned()
+            );
+        }
         if config.db_key.is_some() && config.db_path.is_none() {
             return Err(
                 "MSGKIT_DB_KEY_FILE / MSGKIT_DB_KEY needs MSGKIT_DB_PATH: there is no database to encrypt"
@@ -254,6 +305,44 @@ impl Config {
         let code = code.as_ref().trim();
         self.default_country_code = Some(code.strip_prefix('+').unwrap_or(code).to_owned());
         self
+    }
+
+    /// Sets [`replay_protection`](Self::replay_protection).
+    #[must_use]
+    pub fn with_replay_protection(mut self, mode: ReplayMode) -> Self {
+        self.replay_protection = mode;
+        self
+    }
+
+    /// Sets [`replay_window`](Self::replay_window).
+    #[must_use]
+    pub fn with_replay_window(mut self, window: Duration) -> Self {
+        self.replay_window = Some(window);
+        self
+    }
+
+    fn replay_policy(&self) -> ReplayPolicy {
+        ReplayPolicy::new(self.replay_window.unwrap_or(ReplayPolicy::DEFAULT_WINDOW))
+    }
+
+    /// With `enforce`, an id must be remembered at least as long as the window: otherwise a replay after the id is
+    /// forgotten but inside the window would be accepted again.
+    fn validate_replay(&self) -> msgkit_core::Result<()> {
+        if self.replay_protection != ReplayMode::Enforce {
+            return Ok(());
+        }
+        let window = self.replay_policy().window;
+        let retention = self.id_retention.unwrap_or(DEFAULT_RETENTION);
+        if retention < window {
+            return Err(msgkit_core::Error::InvalidInput(format!(
+                "MSGKIT_ID_RETENTION_DAYS ({} days) is shorter than the replay window ({} hours): a replay inside \
+                 the window could be accepted after its id was forgotten; raise MSGKIT_ID_RETENTION_DAYS or lower \
+                 MSGKIT_REPLAY_WINDOW_HOURS",
+                retention.as_secs() / 86_400,
+                window.as_secs() / 3600
+            )));
+        }
+        Ok(())
     }
 
     /// Sets [`db_key`](Self::db_key).
@@ -352,6 +441,8 @@ impl Config {
             pending_max_age: None,
             default_country_code: None,
             db_key: None,
+            replay_protection: ReplayMode::Off,
+            replay_window: None,
         }
     }
 }
@@ -472,6 +563,7 @@ impl AppState {
     /// otherwise using an in-memory store.
     pub fn new(config: Config) -> msgkit_core::Result<Self> {
         config.limits.validate()?;
+        config.validate_replay()?;
         let store = match &config.db_path {
             Some(path) => {
                 let mut db = SqliteStore::open_with(path, &config.store_options())?;
@@ -874,8 +966,54 @@ fn verify_subscription(cfg: Option<&WebhookConfig>, q: VerifyQuery) -> Response 
     }
 }
 
+/// What replay protection found in one delivery.
+#[derive(Default)]
+struct ReplayCounts {
+    /// Events older than the window.
+    stale: usize,
+    /// Events further ahead of the clock than the allowed skew.
+    future: usize,
+    /// The age of the oldest event outside the window, in milliseconds.
+    oldest_age_ms: i64,
+}
+
+impl ReplayCounts {
+    /// One warning line (counts and an age, never an id, a sender or text) and one fixed warning for the answer.
+    fn warn(&self, mode: ReplayMode, platform: &str, warnings: &mut Vec<String>) {
+        let outside = self.stale + self.future;
+        if outside == 0 {
+            return;
+        }
+        let oldest_age_hours = self.oldest_age_ms / 3_600_000;
+        if mode == ReplayMode::Enforce {
+            tracing::warn!(
+                platform,
+                dropped = outside,
+                stale = self.stale,
+                future = self.future,
+                oldest_age_hours,
+                "webhook events outside the replay window were dropped"
+            );
+            warnings.push(format!("{outside} event(s) outside the replay window were dropped"));
+        } else {
+            tracing::warn!(
+                platform,
+                would_drop = outside,
+                stale = self.stale,
+                future = self.future,
+                oldest_age_hours,
+                "webhook events outside the replay window would be dropped in enforce mode"
+            );
+            warnings.push(format!(
+                "{outside} event(s) outside the replay window would be dropped in enforce mode"
+            ));
+        }
+    }
+}
+
 async fn receive_webhook(
     state: &AppState,
+    platform: &'static str,
     cfg: Option<&WebhookConfig>,
     headers: &HeaderMap,
     body: &Bytes,
@@ -906,10 +1044,38 @@ async fn receive_webhook(
             .into_response()
         }
     };
-    let report = match normalize(&payload, &state.config.limits) {
+    let mut report = match normalize(&payload, &state.config.limits) {
         Ok(r) => r,
         Err(e) => return core_error(&e).into_response(),
     };
+
+    // Replay protection: events whose (signed) timestamp is outside the window. Nothing about them is logged but
+    // counts and an age; the answer is 200 either way, because Meta retries anything else for days.
+    let mode = state.config.replay_protection;
+    let mut replay = ReplayCounts::default();
+    if mode != ReplayMode::Off {
+        let policy = state.config.replay_policy();
+        let now = jiff::Timestamp::now().as_millisecond();
+        let mut kept = Vec::with_capacity(report.events.len());
+        for event in report.events {
+            match policy.classify(&event, now) {
+                Freshness::Fresh => kept.push(event),
+                outside => {
+                    match outside {
+                        Freshness::Future => replay.future += 1,
+                        _ => replay.stale += 1,
+                    }
+                    let age = now.saturating_sub(event.timestamp().timestamp_millis());
+                    replay.oldest_age_ms = replay.oldest_age_ms.max(age);
+                    if mode == ReplayMode::Log {
+                        kept.push(event);
+                    }
+                }
+            }
+        }
+        report.events = kept;
+        replay.warn(mode, platform, &mut report.warnings);
+    }
 
     // The batch is stored atomically. If storage fails we answer 500 *without*
     // having stored anything, so Meta's retry delivers the whole payload again.
@@ -919,12 +1085,17 @@ async fn receive_webhook(
         Ok(n) => n,
         Err(e) => return e.into_response(),
     };
-    Json(json!({
+    let mut answer = json!({
         "accepted": accepted,
         "duplicates": total - accepted,
         "warnings": report.warnings,
-    }))
-    .into_response()
+    });
+    if mode != ReplayMode::Off {
+        answer["replay_protection"] = json!(if mode == ReplayMode::Log { "log" } else { "enforce" });
+        answer["stale"] = json!(replay.stale);
+        answer["future"] = json!(replay.future);
+    }
+    Json(answer).into_response()
 }
 
 async fn whatsapp_verify(State(s): State<AppState>, AppQuery(q): AppQuery<VerifyQuery>) -> Response {
@@ -932,8 +1103,15 @@ async fn whatsapp_verify(State(s): State<AppState>, AppQuery(q): AppQuery<Verify
 }
 
 async fn whatsapp_receive(State(s): State<AppState>, headers: HeaderMap, body: Bytes) -> Response {
-    receive_webhook(&s, s.config.whatsapp.as_ref(), &headers, &body, webhook::normalize_whatsapp_with_limits)
-        .await
+    receive_webhook(
+        &s,
+        "whatsapp",
+        s.config.whatsapp.as_ref(),
+        &headers,
+        &body,
+        webhook::normalize_whatsapp_with_limits,
+    )
+    .await
 }
 
 async fn messenger_verify(State(s): State<AppState>, AppQuery(q): AppQuery<VerifyQuery>) -> Response {
@@ -943,6 +1121,7 @@ async fn messenger_verify(State(s): State<AppState>, AppQuery(q): AppQuery<Verif
 async fn messenger_receive(State(s): State<AppState>, headers: HeaderMap, body: Bytes) -> Response {
     receive_webhook(
         &s,
+        "messenger",
         s.config.messenger.as_ref(),
         &headers,
         &body,
@@ -1254,5 +1433,37 @@ mod tests {
         assert_eq!(e, "MSGKIT_DB_KEY_FILE must hold a key of 64 hexadecimal characters (256 bits)");
         let e = db_key_from(&env(&[("MSGKIT_DB_KEY", "not-a-key-SECRET")]), &no_file).unwrap_err();
         assert_eq!(e, "MSGKIT_DB_KEY must hold a key of 64 hexadecimal characters (256 bits)");
+    }
+
+    #[test]
+    fn the_replay_settings_are_read_by_name_and_bad_values_are_refused_without_echo() {
+        let mode = |v: &'static str| {
+            replay_mode_from(&move |name: &str| (name == "MSGKIT_REPLAY_PROTECTION").then(|| v.to_owned()))
+        };
+        assert_eq!(replay_mode_from(&env(&[])).unwrap(), ReplayMode::Off);
+        assert_eq!(mode("").unwrap(), ReplayMode::Off);
+        assert_eq!(mode("off").unwrap(), ReplayMode::Off);
+        assert_eq!(mode(" LOG ").unwrap(), ReplayMode::Log);
+        assert_eq!(mode("Enforce").unwrap(), ReplayMode::Enforce);
+        for bad in ["on", "true", "1", "enforce!", "SECRET-VALUE"] {
+            let e = mode(bad).unwrap_err();
+            assert_eq!(e, "MSGKIT_REPLAY_PROTECTION must be off, log or enforce");
+        }
+
+        let hours = |v: &'static str| {
+            replay_window_from(&move |name: &str| {
+                (name == "MSGKIT_REPLAY_WINDOW_HOURS").then(|| v.to_owned())
+            })
+        };
+        assert_eq!(replay_window_from(&env(&[])).unwrap(), None);
+        assert_eq!(hours("").unwrap(), None);
+        assert_eq!(hours(" 192 ").unwrap(), Some(Duration::from_secs(192 * 3600)));
+        assert_eq!(hours("8760").unwrap(), Some(Duration::from_secs(8760 * 3600)));
+        for bad in ["0", "8761", "-1", "1.5", "8 days", "SECRET-VALUE"] {
+            assert_eq!(
+                hours(bad).unwrap_err(),
+                "MSGKIT_REPLAY_WINDOW_HOURS must be a whole number of hours from 1 to 8760"
+            );
+        }
     }
 }

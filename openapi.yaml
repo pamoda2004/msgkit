@@ -248,6 +248,9 @@ components:
             properties:
               accepted: { type: integer }
               duplicates: { type: integer }
+              replay_protection: { type: string, enum: [log, enforce], description: "Present only when MSGKIT_REPLAY_PROTECTION is not off." }
+              stale: { type: integer, description: "Events older than the replay window (dropped with `enforce`, only counted with `log`). Present only when replay protection is on." }
+              future: { type: integer, description: "Events more than 10 minutes ahead of the server clock. Present only when replay protection is on." }
               warnings: { type: array, items: { type: string } }
     Unauthorized:
       description: Missing or invalid bearer token

@@ -6,6 +6,7 @@ plugins {
     `maven-publish`
     id("org.jlleitschuh.gradle.ktlint")
     id("dev.detekt")
+    id("org.cyclonedx.bom")
 }
 
 // The Kotlin package is released in lock-step with the Rust workspace.
@@ -47,6 +48,15 @@ dependencies {
 // The release workflow fills `natives/`; a plain checkout has none and falls
 // back to jna.library.path / MSGKIT_LIB.
 sourceSets.main { resources.srcDir("natives") }
+
+// The software bill of materials of the JAR: what a consumer's build resolves at runtime (JNA, kotlinx-serialization).
+tasks.cyclonedxDirectBom {
+    includeConfigs.set(listOf("runtimeClasspath"))
+    projectType.set(org.cyclonedx.model.Component.Type.LIBRARY)
+    schemaVersion.set(org.cyclonedx.Version.VERSION_15)
+    jsonOutput.set(layout.buildDirectory.file("reports/cyclonedx/msgkit-kotlin.cdx.json"))
+    xmlOutput.unsetConvention()
+}
 
 tasks.test {
     useJUnitPlatform()

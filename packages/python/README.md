@@ -46,4 +46,4 @@ python -m unittest discover -s packages/python/tests -v   # with PYTHONPATH=pack
 python packages/python/scripts/build_wheel.py   # native library + platform wheel in packages/python/dist
 ```
 
-`MSGKIT_LIB=/path/to/library` overrides library discovery.
+The native library is the one bundled in the wheel. `MSGKIT_LIB=/absolute/path/to/library` overrides it: it must be an **absolute** path to an existing file (anything else is an error, not a silent fallback), it keeps priority over the bundled library with a `RuntimeWarning` when one exists, and the loaded library must report the same version as the package or the load is refused. A development build under `target/` is found automatically **only when the package is imported from a source checkout** (an installed wheel never looks there).

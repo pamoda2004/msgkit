@@ -7,6 +7,7 @@ import json
 import os
 import sys
 import threading
+import warnings
 from pathlib import Path
 from typing import Any, Optional
 
@@ -25,19 +26,78 @@ def library_filename() -> str:
     return "libmsgkit_ffi.so"
 
 
+def _source_checkout_root() -> Optional[Path]:
+    """The repository root when this package is imported from a source checkout, otherwise ``None``.
+
+    An installed package (a wheel in ``site-packages``) is never a source checkout, so it never looks for a
+    development build: the directory five levels above an installed file is not a place to load code from.
+    """
+    here = Path(__file__).resolve()
+    if len(here.parents) < 5:
+        return None
+    root = here.parents[4]
+    expected = (root / "packages" / "python" / "src" / "msgkit").resolve()
+    if here.parent == expected and (root / "Cargo.toml").is_file() and (root / "crates" / "msgkit-ffi").is_dir():
+        return root
+    return None
+
+
+def _bundled() -> Path:
+    return Path(__file__).resolve().parent / "_lib" / library_filename()
+
+
 def _candidates() -> list[Path]:
+    """The libraries to try, in order: the one bundled in the wheel, then (source checkout only) a development build."""
     name = library_filename()
-    found: list[Path] = []
-    explicit = os.environ.get("MSGKIT_LIB")
-    if explicit:
-        found.append(Path(explicit))
-    # 1. The library bundled in the wheel.
-    found.append(Path(__file__).resolve().parent / "_lib" / name)
-    # 2. A development checkout: packages/python/src/msgkit -> repository root.
-    root = Path(__file__).resolve().parents[4]
-    for profile in ("release", "debug"):
-        found.append(root / "target" / profile / name)
+    found = [_bundled()]
+    root = _source_checkout_root()
+    if root is not None:
+        for profile in ("release", "debug"):
+            found.append(root / "target" / profile / name)
     return found
+
+
+def _explicit_override() -> Optional[Path]:
+    """``MSGKIT_LIB``, checked: it must be an absolute path to an existing file.
+
+    It keeps priority over the bundled library, because it is an explicit choice. A wrong value is an error and
+    never falls back silently, so nobody believes they are running their own build when they are not.
+    """
+    raw = os.environ.get("MSGKIT_LIB")
+    if not raw:
+        return None
+    path = Path(raw)
+    if not path.is_absolute():
+        raise FileNotFoundError("MSGKIT_LIB must be an absolute path to the native library")
+    if not path.is_file():
+        raise FileNotFoundError("MSGKIT_LIB does not name an existing file")
+    return path
+
+
+def _check_version(lib: ctypes.CDLL) -> None:
+    """The loaded library must be the version of this package: a stale or foreign library is refused."""
+    from . import __version__
+
+    native = str(lib.msgkit_version().decode("ascii"))
+    if native != __version__:
+        raise RuntimeError(
+            f"the msgkit native library is version {native} but the Python package is version {__version__}: "
+            "refusing to use a mismatched library"
+        )
+
+
+def _open(path: Path) -> ctypes.CDLL:
+    lib = ctypes.CDLL(str(path))
+    lib.msgkit_call.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
+    # c_void_p (not c_char_p): Python must not copy-and-forget the
+    # pointer that has to be handed back to msgkit_free.
+    lib.msgkit_call.restype = ctypes.c_void_p
+    lib.msgkit_free.argtypes = [ctypes.c_void_p]
+    lib.msgkit_free.restype = None
+    lib.msgkit_version.argtypes = []
+    lib.msgkit_version.restype = ctypes.c_char_p
+    _check_version(lib)
+    return lib
 
 
 def _load() -> ctypes.CDLL:
@@ -45,23 +105,25 @@ def _load() -> ctypes.CDLL:
     with _lock:
         if _lib is not None:
             return _lib
+        override = _explicit_override()
+        if override is not None:
+            if _bundled().is_file():
+                warnings.warn(
+                    "MSGKIT_LIB replaces the native library bundled with the msgkit wheel; "
+                    "unset it to use the bundled, release-verified library",
+                    RuntimeWarning,
+                    stacklevel=3,
+                )
+            _lib = _open(override)
+            return _lib
         for path in _candidates():
             if path.is_file():
-                lib = ctypes.CDLL(str(path))
-                lib.msgkit_call.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
-                # c_void_p (not c_char_p): Python must not copy-and-forget the
-                # pointer that has to be handed back to msgkit_free.
-                lib.msgkit_call.restype = ctypes.c_void_p
-                lib.msgkit_free.argtypes = [ctypes.c_void_p]
-                lib.msgkit_free.restype = None
-                lib.msgkit_version.argtypes = []
-                lib.msgkit_version.restype = ctypes.c_char_p
-                _lib = lib
-                return lib
-        tried = "\n  ".join(str(p) for p in _candidates())
+                _lib = _open(path)
+                return _lib
         raise FileNotFoundError(
-            f"msgkit native library '{library_filename()}' not found. Set MSGKIT_LIB or build it "
-            f"with `cargo build -p msgkit-ffi --release`. Looked in:\n  {tried}"
+            f"msgkit native library '{library_filename()}' not found in the installed package. "
+            "Reinstall msgkit (a wheel bundles it), set MSGKIT_LIB to an absolute path, or, in a source "
+            "checkout, build it with `cargo build -p msgkit-ffi --release`."
         )
 
 

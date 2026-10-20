@@ -194,7 +194,7 @@ Observations:
 * **Never executed.** Local git has no commits. First-run failures are likely (Windows/macOS specifics, `gradlew` executable bit, Android emulator job, manylinux container steps).
 * CI jobs present: lint, test ×3 OS, MSRV, Node 20/22/24, Python 3.9 and 3.13 ×3 OS, Kotlin JVM (JDK 21), Android emulator (API 34). **Missing**: JDK 17, Python 3.10–3.12, coverage, semver and schema-compatibility checks, ruff/mypy/eslint/tsc/ktlint/detekt, `cargo audit`/`deny`, `npm audit`, `pip-audit`, secret/PII scan, Dependabot/Renovate.
 * Hygiene: no top-level `permissions:` block, no `concurrency`, actions pinned to tags (not commit SHAs), toolchain is the floating `stable` (`rust-toolchain.toml`), no Gradle caching.
-* Release workflow: no SBOM, no signing/provenance (npm `--provenance` is set), no `cargo publish` job, crates lack `repository`/`homepage` metadata; Maven Central deliberately not automated.
+* Release workflow: no SBOM, no signing/provenance (npm `--provenance` is set), no `cargo publish` job, crates lack `repository`/`homepage` metadata; Maven Central deliberately not automated. *(Phase 4 (g) added CycloneDX SBOMs, Sigstore signatures, GitHub build provenance and a guarded dry run; see [VERIFYING.md](VERIFYING.md). Still open: `cargo publish`, crate metadata, Maven Central, a real run.)*
 * Governance files missing: `CODE_OF_CONDUCT.md`, `MAINTAINERS.md`, issue/PR templates, ADRs, `CODEOWNERS`. `SECURITY.md` names no concrete contact and GitHub private vulnerability reporting is not enabled.
 * Three generated PDFs (940 KB) are committed under `docs/`; they contain status statements that will go stale.
 
@@ -233,7 +233,7 @@ Observations:
 | F16 | P2 | Correctness | Fixed UTC offset only; DST/historic offsets wrong on long chats | 2/3 (decision) |
 | F17 | P2 | CI | Missing gates: coverage, semver/schema checks, audit/deny, lint for all languages, pinning | 1 |
 | F18 | P2 | Tests | No property/fuzz/mutation tests, CLI untested, no byte-identical conformance runner | 2 |
-| F20 | P2 | Supply chain | No SBOM, signing, crate metadata; package names unverified | 4, 8 |
+| F20 | P2 | Supply chain | No SBOM, signing, crate metadata; package names unverified | 4 (SBOM, signing, provenance done), 8 (names, metadata) |
 | F29 | P2 | Privacy | Public commits would expose a personal email; SECURITY contact undefined | 1 (decision) |
 | F19 | P3 | Correctness | Sender names containing `: ` ambiguous | 2 (optional participant list) |
 | F21 | P3 | Docs | Generated PDFs committed; status text will go stale | 8 |

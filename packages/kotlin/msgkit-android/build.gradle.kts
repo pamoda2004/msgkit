@@ -3,6 +3,7 @@ plugins {
     `maven-publish`
     id("org.jlleitschuh.gradle.ktlint")
     id("dev.detekt")
+    id("org.cyclonedx.bom")
 }
 
 val workspaceVersion: String =
@@ -83,4 +84,13 @@ afterEvaluate {
 detekt {
     buildUponDefaultConfig = true
     config.setFrom(rootDir.resolve("detekt.yml"))
+}
+
+// The software bill of materials of the AAR: what a consumer's build resolves at runtime for the release variant.
+tasks.cyclonedxDirectBom {
+    includeConfigs.set(listOf("releaseRuntimeClasspath"))
+    projectType.set(org.cyclonedx.model.Component.Type.LIBRARY)
+    schemaVersion.set(org.cyclonedx.Version.VERSION_15)
+    jsonOutput.set(layout.buildDirectory.file("reports/cyclonedx/msgkit-android.cdx.json"))
+    xmlOutput.unsetConvention()
 }

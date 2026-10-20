@@ -76,8 +76,8 @@ Endpoints: `/healthz` (no auth); `/v1/*` imports, events, ack, version (bearer t
 | STRIDE | Threat | Today | Status |
 |---|---|---|---|
 | **S** | A forged webhook. | A POST is refused unless an app secret is configured and `X-Hub-Signature-256` verifies (HMAC-SHA256, compared in constant time by the `hmac` crate). The handshake compares the verify token without leaking a matching prefix. An unconfigured webhook answers 503 and processes nothing. | Mitigated |
-| **S** | Anyone who can reach the port calls `/v1/*`. | Binds to `127.0.0.1` by default. With a non-loopback bind and no token the service starts but logs a warning; **it does not refuse to start**. One shared bearer token, no scopes. | Partly mitigated; **Gap** (F15, Phase 5) |
-| **S** | A web page the user visits attacks the loopback service (DNS rebinding or a local cross-origin request) when no token is set. | The `Host` header is not checked and no CORS policy is set; browsers will not hand a cross-origin page the response without CORS headers, but DNS rebinding makes the origin look same-site. Setting `MSGKIT_API_TOKEN` stops it. | **Gap**: recommend a token even on loopback; Host check proposed for Phase 5 |
+| **S** | Anyone who can reach the port calls `/v1/*`. | Binds to `127.0.0.1` by default. A non-loopback `MSGKIT_BIND` without `MSGKIT_API_TOKEN` is refused at startup, with no override (`crates/msgkit-service/tests/host_check.rs::a_non_loopback_bind_needs_a_token` and `the_binary_refuses_to_start_on_a_non_loopback_address_without_a_token`). One shared bearer token, no scopes. | Mitigated for exposure by misconfiguration; **Gap** (F15): one shared token, no scopes or rate limit, Phase 5 |
+| **S** | A web page the user visits attacks the loopback service (DNS rebinding or a local cross-origin request) when no token is set. | Without a token, `/v1/*` refuses any `Host` that is not `localhost`, `*.localhost`, a loopback address or in `MSGKIT_ALLOWED_HOSTS` (403 `host_not_allowed`; `host_check.rs`). Requests without a `Host` header are let through (a browser always sends one). No CORS headers are set, so browsers will not hand a cross-origin page the response. With a token set the host is not checked: a page cannot know the token. | Mitigated |
 | **T** | A replayed webhook delivery is processed again, or a body is altered in transit. | HMAC covers the body, so alteration is detected. Replay is rejected only by event-id de-duplication; after the 30-day prune an old delivery is accepted again (F14). No transport security is built in: serve behind TLS. | **Gap (F14)** → PR (f) |
 | **R** | "Who read or drained the queue?" | No audit log of API calls; logs carry counts and ids only, never content (by rule). Acknowledge is not attributed to a caller. | Accepted for now; scoped tokens in Phase 5 |
 | **I** | Content in logs, errors or health output. | Error bodies are fixed text with a stable `code`; `AppJson` and `AppQuery` replace axum's rejections, which quote the value; storage failures log the cause but clients get "storage error". The log filter defaults to `info`; a `debug` or `trace` filter set by the operator could log more from dependencies, though msgkit itself does not log content. | Mitigated; operators should keep the default `info` level |
@@ -119,7 +119,7 @@ There is currently **no way to delete everything about one person** and no confi
 | Replay accepted after the 30-day prune | F14 | Phase 4 (f), opt-in |
 | No SBOM, signatures, provenance, SECURITY.md | | Phase 4 (g) |
 | No Miri or sanitizer run over the unsafe code | F12 | Phase 4 (h) |
-| One shared token, no rate limit or timeouts, no Host check, no `/readyz`; Windows file permissions | F15 | Phase 5 |
+| One shared token (no scopes), no rate limit or timeouts, no `/readyz`; Windows file permissions | F15 | Phase 5 |
 
 ## Keeping this document true
 

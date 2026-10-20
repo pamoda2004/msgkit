@@ -1,0 +1,21 @@
+{
+  "op": "normalize_whatsapp_webhook",
+  "input": {
+    "payload": {
+      "object": "whatsapp_business_account",
+      "entry": [
+        {
+          "changes": [
+            {
+              "value": {}
+            }
+          ]
+        }
+      ]
+    },
+    "limits": {
+      "max_json_depth": 3
+    }
+  },
+  "note": "A webhook payload nested deeper than max_json_depth"
+}

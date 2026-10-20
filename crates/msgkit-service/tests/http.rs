@@ -11,12 +11,14 @@ const TOKEN: &str = "verify-me";
 
 fn config(api_token: Option<&str>, db_path: Option<&std::path::Path>) -> Config {
     let wh = WebhookConfig { app_secret: SECRET.into(), verify_token: TOKEN.into() };
-    Config {
-        whatsapp: Some(wh.clone()),
-        messenger: Some(wh),
-        api_token: api_token.map(str::to_owned),
-        db_path: db_path.map(std::path::Path::to_path_buf),
+    let mut config = Config::default().with_whatsapp(wh.clone()).with_messenger(wh);
+    if let Some(token) = api_token {
+        config = config.with_api_token(token);
     }
+    if let Some(path) = db_path {
+        config = config.with_db_path(path);
+    }
+    config
 }
 
 fn app(api_token: Option<&str>) -> Router {

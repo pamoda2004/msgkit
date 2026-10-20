@@ -52,6 +52,7 @@ public object Msgkit {
     @Serializable
     private class WebhookInput(
         val payload: JsonElement,
+        val limits: Limits = Limits(),
     )
 
     @Serializable
@@ -111,20 +112,27 @@ public object Msgkit {
      * Normalizes a WhatsApp Business Cloud API webhook body.
      *
      * Does **not** verify the signature: call [verifySignature] on the same raw
-     * body first.
+     * body first. Over a limit in [limits] this throws [MsgkitException] with code `limit_exceeded`.
      */
     @JvmStatic
-    public fun normalizeWhatsAppWebhook(rawBody: String): ImportReport = webhook("normalize_whatsapp_webhook", rawBody)
+    @JvmOverloads
+    public fun normalizeWhatsAppWebhook(
+        rawBody: String,
+        limits: Limits = Limits(),
+    ): ImportReport = webhook("normalize_whatsapp_webhook", rawBody, limits)
 
     /**
      * Normalizes a Messenger Platform webhook body.
      *
      * Does **not** verify the signature: call [verifySignature] on the same raw
-     * body first.
+     * body first. Over a limit in [limits] this throws [MsgkitException] with code `limit_exceeded`.
      */
     @JvmStatic
-    public fun normalizeMessengerWebhook(rawBody: String): ImportReport =
-        webhook("normalize_messenger_webhook", rawBody)
+    @JvmOverloads
+    public fun normalizeMessengerWebhook(
+        rawBody: String,
+        limits: Limits = Limits(),
+    ): ImportReport = webhook("normalize_messenger_webhook", rawBody, limits)
 
     /**
      * Checks an `X-Hub-Signature-256` header against the **raw, unparsed**
@@ -156,9 +164,10 @@ public object Msgkit {
     private fun webhook(
         op: String,
         rawBody: String,
+        limits: Limits,
     ): ImportReport {
         val payload = parseJson(rawBody, "rawBody")
-        val input = json.encodeToString(WebhookInput.serializer(), WebhookInput(payload))
+        val input = json.encodeToString(WebhookInput.serializer(), WebhookInput(payload, limits))
         return call(op, input, ImportReport.serializer())
     }
 

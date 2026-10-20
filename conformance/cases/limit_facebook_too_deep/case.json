@@ -1,0 +1,28 @@
+{
+  "op": "parse_facebook_export",
+  "input": {
+    "thread": {
+      "participants": [],
+      "messages": [],
+      "extra": [
+        [
+          [
+            [
+              [
+                [
+                  1
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    "options": {
+      "limits": {
+        "max_json_depth": 3
+      }
+    }
+  },
+  "note": "JSON nested deeper than max_json_depth"
+}

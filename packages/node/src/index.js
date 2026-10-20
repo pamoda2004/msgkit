@@ -102,6 +102,8 @@ function wasm() {
  */
 function writeBytes(x, bytes) {
   const ptr = x.msgkit_alloc(bytes.length);
+  // 0 means the module refused: more than 512 MiB in one buffer.
+  if (!ptr) throw new MsgkitError('limit_exceeded', 'the input is too large for the WebAssembly module');
   // Re-read `memory.buffer` after every allocation: growing memory detaches old views.
   new Uint8Array(x.memory.buffer, ptr, bytes.length).set(bytes);
   return ptr;
@@ -192,18 +194,20 @@ export function normalizeDevice(batch, options = {}) {
  * Normalizes a WhatsApp Business Cloud API webhook payload. Does NOT verify
  * the signature: call {@link verifySignature} on the raw body first.
  * @param {object} payload
+ * @param {import('./index.js').Limits} [limits] upper bounds for this call; `{ unlimited: true }` switches them off
  */
-export function normalizeWhatsAppWebhook(payload) {
-  return dispatch('normalize_whatsapp_webhook', { payload });
+export function normalizeWhatsAppWebhook(payload, limits) {
+  return dispatch('normalize_whatsapp_webhook', limits ? { payload, limits } : { payload });
 }
 
 /**
  * Normalizes a Messenger Platform webhook payload. Does NOT verify the
  * signature: call {@link verifySignature} on the raw body first.
  * @param {object} payload
+ * @param {import('./index.js').Limits} [limits] upper bounds for this call; `{ unlimited: true }` switches them off
  */
-export function normalizeMessengerWebhook(payload) {
-  return dispatch('normalize_messenger_webhook', { payload });
+export function normalizeMessengerWebhook(payload, limits) {
+  return dispatch('normalize_messenger_webhook', limits ? { payload, limits } : { payload });
 }
 
 /**

@@ -11,6 +11,7 @@
 //! * [`whatsapp_export`], [`facebook`]: parsers for user-downloaded exports.
 //! * [`webhook`]: signature checks and normalizers for official business APIs.
 //! * [`device`]: normalizer for Android SMS/call-log rows.
+//! * [`limits`]: how much input one import accepts (`limit_exceeded` when it is more).
 //! * [`api`]: JSON-in/JSON-out dispatcher used by every language binding.
 //! * [`store`]: the storage trait and an in-memory implementation.
 
@@ -19,6 +20,7 @@ pub mod device;
 pub mod error;
 pub mod facebook;
 pub mod id;
+pub mod limits;
 pub mod model;
 pub mod phone;
 pub mod store;
@@ -32,4 +34,4 @@ pub use tz::tzdata_version;
 
 /// Version of the JSON data contract (`schema/`). Bumped independently of the
 /// crate version: minor for additive changes, major for breaking ones.
-pub const SCHEMA_VERSION: &str = "1.1.0";
+pub const SCHEMA_VERSION: &str = "1.2.0";

@@ -9,7 +9,9 @@ use chrono::DateTime;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::error::Result;
 use crate::id::{derive_id, Ordinals};
+use crate::limits::Limits;
 use crate::model::{Call, CallOutcome, Channel, Direction, Event, ImportReport, Message, Participant};
 use crate::phone::normalize_phone;
 
@@ -77,6 +79,10 @@ pub struct DeviceOptions {
     pub own_number: Option<String>,
     /// Calling code (digits) for national numbers such as `0700000000`.
     pub default_country_code: Option<String>,
+    /// Upper bounds for this import. The defaults suit real devices. Only `max_messages` (SMS rows plus call
+    /// rows) and the size and depth of the whole request apply to a batch. Over a limit the import fails with
+    /// `limit_exceeded`.
+    pub limits: Limits,
 }
 
 impl DeviceOptions {
@@ -93,9 +99,33 @@ impl DeviceOptions {
         self.default_country_code = Some(code.into());
         self
     }
+
+    /// Sets [`limits`](Self::limits).
+    #[must_use]
+    pub fn with_limits(mut self, limits: Limits) -> Self {
+        self.limits = limits;
+        self
+    }
 }
 
+/// Infallible: when the batch is over `opts.limits`, the report has no events and one warning that names the
+/// limit. Use [`try_normalize`] to get `limit_exceeded` as an error instead.
+#[must_use]
 pub fn normalize(batch: &DeviceBatch, opts: &DeviceOptions) -> ImportReport {
+    try_normalize(batch, opts).unwrap_or_else(|e| {
+        let mut report = ImportReport::default();
+        report.warnings.push(format!("nothing was imported: {e}"));
+        report
+    })
+}
+
+/// Like [`normalize`], but refuses a batch over `opts.limits`.
+///
+/// # Errors
+/// [`Error::LimitExceeded`](crate::Error::LimitExceeded) when SMS rows plus call rows are more than `max_messages`.
+pub fn try_normalize(batch: &DeviceBatch, opts: &DeviceOptions) -> Result<ImportReport> {
+    opts.limits.validate()?;
+    opts.limits.check_messages(batch.sms.len().saturating_add(batch.calls.len()))?;
     let mut report = ImportReport::default();
     let mut ordinals = Ordinals::default();
     let cc = opts.default_country_code.as_deref();
@@ -180,5 +210,5 @@ pub fn normalize(batch: &DeviceBatch, opts: &DeviceOptions) -> ImportReport {
         report.warnings.push(format!("{skipped} record(s) skipped because their timestamp was invalid"));
     }
     report.sort();
-    report
+    Ok(report)
 }

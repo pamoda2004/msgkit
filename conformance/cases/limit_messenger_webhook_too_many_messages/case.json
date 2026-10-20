@@ -1,0 +1,44 @@
+{
+  "op": "normalize_messenger_webhook",
+  "input": {
+    "payload": {
+      "object": "page",
+      "entry": [
+        {
+          "messaging": [
+            {
+              "sender": {
+                "id": "1"
+              },
+              "recipient": {
+                "id": "2"
+              },
+              "timestamp": 1700000000000,
+              "message": {
+                "mid": "m1",
+                "text": "one"
+              }
+            },
+            {
+              "sender": {
+                "id": "1"
+              },
+              "recipient": {
+                "id": "2"
+              },
+              "timestamp": 1700000001000,
+              "message": {
+                "mid": "m2",
+                "text": "two"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "limits": {
+      "max_messages": 1
+    }
+  },
+  "note": "Two messages with max_messages 1"
+}

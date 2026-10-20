@@ -103,6 +103,9 @@ class WhatsAppExportOptions(TypedDict, total=False):
     conversation_id: Optional[str]
     # Calling code (digits, e.g. `"94"`) used to normalize sender names that are national phone numbers.
     default_country_code: Optional[str]
+    # Upper bounds for this import. The defaults suit real exports. Over a limit the import fails with
+    # `limit_exceeded` and nothing is imported.
+    limits: Limits
     # IANA time-zone name of the phone (exact spelling, e.g. `"Asia/Colombo"`). When set it replaces
     # `utc_offset_minutes` and follows the zone's daylight-saving rules; event ids do not depend on it. A
     # time in a repeated hour uses the first occurrence and a time in a skipped hour moves forward by the
@@ -116,6 +119,9 @@ class FacebookExportOptions(TypedDict, total=False):
     self_name: Optional[str]
     # Overrides the conversation id (defaults to the export's `thread_path`).
     conversation_id: Optional[str]
+    # Upper bounds for this import. The defaults suit real exports. Over a limit the import fails with
+    # `limit_exceeded` and nothing is imported.
+    limits: Limits
 
 
 class _RawSmsRequired(TypedDict):
@@ -158,6 +164,25 @@ class DeviceOptions(TypedDict, total=False):
     own_number: Optional[str]
     # Calling code (digits) for national numbers such as `0700000000`.
     default_country_code: Optional[str]
+    # Upper bounds for this import. The defaults suit real devices. Only `max_messages` (SMS rows plus
+    # call rows) and the size and depth of the whole request apply to a batch. Over a limit the import
+    # fails with `limit_exceeded`.
+    limits: Limits
+
+
+class Limits(TypedDict, total=False):
+    # Largest accepted input, in bytes: the exported text for a WhatsApp export, the whole JSON document
+    # for the other imports. Absent: 33554432 (32 MiB).
+    max_input_bytes: Optional[int]
+    # Deepest accepted nesting of JSON arrays and objects in the document handed to msgkit. Through the
+    # JSON entry point that document is the whole request, so its wrapper object counts. Absent: 32.
+    max_json_depth: Optional[int]
+    # Longest accepted line of a WhatsApp export, in bytes. Absent: 262144 (256 KiB).
+    max_line_bytes: Optional[int]
+    # Most messages, calls and notices accepted in one import. Absent: 1000000.
+    max_messages: Optional[int]
+    # Switches every limit off. The only way to do so; use it only for input you trust. Default `false`.
+    unlimited: bool
 
 
 # </generated types>

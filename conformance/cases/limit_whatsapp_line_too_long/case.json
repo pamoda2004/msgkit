@@ -1,0 +1,12 @@
+{
+  "op": "parse_whatsapp_export",
+  "input": {
+    "text": "01/02/2024, 10:00 - Alice: hello\n01/02/2024, 10:01 - Bob: hi\n",
+    "options": {
+      "limits": {
+        "max_line_bytes": 10
+      }
+    }
+  },
+  "note": "A line is longer than max_line_bytes; the error names the line number, never the line"
+}

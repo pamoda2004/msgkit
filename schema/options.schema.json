@@ -111,6 +111,59 @@
     "type": "object"
   },
   "device_options": {
+    "$defs": {
+      "Limits": {
+        "description": "Upper bounds for one import call; the call fails with `limit_exceeded` when one is passed. An absent or null limit has its default. A limit must be at least 1 (0 is refused as `invalid_input`); to switch the limits off set `unlimited` to true.",
+        "properties": {
+          "max_input_bytes": {
+            "default": null,
+            "description": "Largest accepted input, in bytes: the exported text for a WhatsApp export, the whole JSON document for the\nother imports. Absent: 33554432 (32 MiB).",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "max_json_depth": {
+            "default": null,
+            "description": "Deepest accepted nesting of JSON arrays and objects in the document handed to msgkit. Through the JSON\nentry point that document is the whole request, so its wrapper object counts. Absent: 32.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "max_line_bytes": {
+            "default": null,
+            "description": "Longest accepted line of a WhatsApp export, in bytes. Absent: 262144 (256 KiB).",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "max_messages": {
+            "default": null,
+            "description": "Most messages, calls and notices accepted in one import. Absent: 1000000.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "unlimited": {
+            "default": false,
+            "description": "Switches every limit off. The only way to do so; use it only for input you trust. Default `false`.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      }
+    },
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "description": "Options for normalizing Android SMS and call-log rows.",
     "properties": {
@@ -121,6 +174,17 @@
           "string",
           "null"
         ]
+      },
+      "limits": {
+        "$ref": "#/$defs/Limits",
+        "default": {
+          "max_input_bytes": null,
+          "max_json_depth": null,
+          "max_line_bytes": null,
+          "max_messages": null,
+          "unlimited": false
+        },
+        "description": "Upper bounds for this import. The defaults suit real devices. Only `max_messages` (SMS rows plus call\nrows) and the size and depth of the whole request apply to a batch. Over a limit the import fails with\n`limit_exceeded`."
       },
       "own_number": {
         "default": null,
@@ -135,6 +199,59 @@
     "type": "object"
   },
   "facebook_export": {
+    "$defs": {
+      "Limits": {
+        "description": "Upper bounds for one import call; the call fails with `limit_exceeded` when one is passed. An absent or null limit has its default. A limit must be at least 1 (0 is refused as `invalid_input`); to switch the limits off set `unlimited` to true.",
+        "properties": {
+          "max_input_bytes": {
+            "default": null,
+            "description": "Largest accepted input, in bytes: the exported text for a WhatsApp export, the whole JSON document for the\nother imports. Absent: 33554432 (32 MiB).",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "max_json_depth": {
+            "default": null,
+            "description": "Deepest accepted nesting of JSON arrays and objects in the document handed to msgkit. Through the JSON\nentry point that document is the whole request, so its wrapper object counts. Absent: 32.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "max_line_bytes": {
+            "default": null,
+            "description": "Longest accepted line of a WhatsApp export, in bytes. Absent: 262144 (256 KiB).",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "max_messages": {
+            "default": null,
+            "description": "Most messages, calls and notices accepted in one import. Absent: 1000000.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "unlimited": {
+            "default": false,
+            "description": "Switches every limit off. The only way to do so; use it only for input you trust. Default `false`.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      }
+    },
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "description": "Options for parsing Messenger `message_N.json` files.",
     "properties": {
@@ -145,6 +262,17 @@
           "string",
           "null"
         ]
+      },
+      "limits": {
+        "$ref": "#/$defs/Limits",
+        "default": {
+          "max_input_bytes": null,
+          "max_json_depth": null,
+          "max_line_bytes": null,
+          "max_messages": null,
+          "unlimited": false
+        },
+        "description": "Upper bounds for this import. The defaults suit real exports. Over a limit the import fails with\n`limit_exceeded` and nothing is imported."
       },
       "self_name": {
         "default": null,
@@ -175,6 +303,57 @@
             "type": "string"
           }
         ]
+      },
+      "Limits": {
+        "description": "Upper bounds for one import call; the call fails with `limit_exceeded` when one is passed. An absent or null limit has its default. A limit must be at least 1 (0 is refused as `invalid_input`); to switch the limits off set `unlimited` to true.",
+        "properties": {
+          "max_input_bytes": {
+            "default": null,
+            "description": "Largest accepted input, in bytes: the exported text for a WhatsApp export, the whole JSON document for the\nother imports. Absent: 33554432 (32 MiB).",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "max_json_depth": {
+            "default": null,
+            "description": "Deepest accepted nesting of JSON arrays and objects in the document handed to msgkit. Through the JSON\nentry point that document is the whole request, so its wrapper object counts. Absent: 32.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "max_line_bytes": {
+            "default": null,
+            "description": "Longest accepted line of a WhatsApp export, in bytes. Absent: 262144 (256 KiB).",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "max_messages": {
+            "default": null,
+            "description": "Most messages, calls and notices accepted in one import. Absent: 1000000.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "unlimited": {
+            "default": false,
+            "description": "Switches every limit off. The only way to do so; use it only for input you trust. Default `false`.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
       }
     },
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -199,6 +378,17 @@
           "string",
           "null"
         ]
+      },
+      "limits": {
+        "$ref": "#/$defs/Limits",
+        "default": {
+          "max_input_bytes": null,
+          "max_json_depth": null,
+          "max_line_bytes": null,
+          "max_messages": null,
+          "unlimited": false
+        },
+        "description": "Upper bounds for this import. The defaults suit real exports. Over a limit the import fails with\n`limit_exceeded` and nothing is imported."
       },
       "self_name": {
         "default": null,
@@ -226,5 +416,5 @@
     "title": "WhatsAppExportOptions",
     "type": "object"
   },
-  "x-msgkit-schema-version": "1.1.0"
+  "x-msgkit-schema-version": "1.2.0"
 }

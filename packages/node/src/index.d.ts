@@ -95,6 +95,11 @@ export interface WhatsAppExportOptions {
   /** Calling code (digits, e.g. `"94"`) used to normalize sender names that are national phone numbers. */
   default_country_code?: string | null;
   /**
+   * Upper bounds for this import. The defaults suit real exports. Over a limit the import fails with
+   * `limit_exceeded` and nothing is imported.
+   */
+  limits?: Limits;
+  /**
    * IANA time-zone name of the phone (exact spelling, e.g. `"Asia/Colombo"`). When set it replaces
    * `utc_offset_minutes` and follows the zone's daylight-saving rules; event ids do not depend on it.
    * A time in a repeated hour uses the first occurrence and a time in a skipped hour moves forward by
@@ -110,6 +115,11 @@ export interface FacebookExportOptions {
   self_name?: string | null;
   /** Overrides the conversation id (defaults to the export's `thread_path`). */
   conversation_id?: string | null;
+  /**
+   * Upper bounds for this import. The defaults suit real exports. Over a limit the import fails with
+   * `limit_exceeded` and nothing is imported.
+   */
+  limits?: Limits;
 }
 
 /** A row from `Telephony.Sms`. */
@@ -149,6 +159,36 @@ export interface DeviceOptions {
   own_number?: string | null;
   /** Calling code (digits) for national numbers such as `0700000000`. */
   default_country_code?: string | null;
+  /**
+   * Upper bounds for this import. The defaults suit real devices. Only `max_messages` (SMS rows plus
+   * call rows) and the size and depth of the whole request apply to a batch. Over a limit the import
+   * fails with `limit_exceeded`.
+   */
+  limits?: Limits;
+}
+
+/**
+ * Upper bounds for one import call; the call fails with `limit_exceeded` when one is passed. An absent
+ * or null limit has its default. A limit must be at least 1 (0 is refused as `invalid_input`); to
+ * switch the limits off set `unlimited` to true.
+ */
+export interface Limits {
+  /**
+   * Largest accepted input, in bytes: the exported text for a WhatsApp export, the whole JSON document
+   * for the other imports. Absent: 33554432 (32 MiB).
+   */
+  max_input_bytes?: number | null;
+  /**
+   * Deepest accepted nesting of JSON arrays and objects in the document handed to msgkit. Through the
+   * JSON entry point that document is the whole request, so its wrapper object counts. Absent: 32.
+   */
+  max_json_depth?: number | null;
+  /** Longest accepted line of a WhatsApp export, in bytes. Absent: 262144 (256 KiB). */
+  max_line_bytes?: number | null;
+  /** Most messages, calls and notices accepted in one import. Absent: 1000000. */
+  max_messages?: number | null;
+  /** Switches every limit off. The only way to do so; use it only for input you trust. Default `false`. */
+  unlimited?: boolean;
 }
 
 // </generated types>
@@ -185,7 +225,7 @@ export function parseWhatsAppExport(text: string, options?: WhatsAppExportOption
 export function parseFacebookExport(thread: object | string, options?: FacebookExportOptions): ImportReport;
 export function normalizeDevice(batch: DeviceBatch, options?: DeviceOptions): ImportReport;
 /** Does NOT verify the signature: call {@link verifySignature} on the raw body first. */
-export function normalizeWhatsAppWebhook(payload: unknown): ImportReport;
+export function normalizeWhatsAppWebhook(payload: unknown, limits?: Limits): ImportReport;
 /** Does NOT verify the signature: call {@link verifySignature} on the raw body first. */
-export function normalizeMessengerWebhook(payload: unknown): ImportReport;
+export function normalizeMessengerWebhook(payload: unknown, limits?: Limits): ImportReport;
 export function verifySignature(args: { secret: string; body: string; signature: string }): boolean;

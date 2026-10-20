@@ -4,7 +4,11 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// Errors returned by msgkit. Individual malformed records are reported as
 /// warnings in an [`ImportReport`](crate::ImportReport) instead.
+///
+/// `#[non_exhaustive]`: new kinds of error may be added in a minor release, so a `match` needs a catch-all arm
+/// (or use [`Error::code`]).
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum Error {
     /// The caller supplied input the operation cannot work with.
     #[error("invalid input: {0}")]
@@ -17,6 +21,9 @@ pub enum Error {
     /// A storage backend failed (disk full, corrupt database, ...).
     #[error("storage error: {0}")]
     Storage(String),
+    /// The input is larger or deeper than a configured [`Limits`](crate::limits::Limits). Nothing was imported.
+    #[error("limit exceeded: {0}")]
+    LimitExceeded(String),
 }
 
 impl Error {
@@ -28,6 +35,7 @@ impl Error {
             Error::Parse(_) => codes::PARSE_ERROR,
             Error::UnknownOp(_) => codes::UNKNOWN_OP,
             Error::Storage(_) => codes::STORAGE_ERROR,
+            Error::LimitExceeded(_) => codes::LIMIT_EXCEEDED,
         }
     }
 }
@@ -47,7 +55,7 @@ pub mod codes {
     pub const STORAGE_ERROR: &str = "storage_error";
     /// An unexpected failure inside msgkit or at the native boundary (a caught panic, no usable result).
     pub const INTERNAL_ERROR: &str = "internal_error";
-    /// HTTP: the request body is larger than the service accepts.
+    /// The input is larger or deeper than a configured limit (the library's `Limits`, or the HTTP service's body cap).
     pub const LIMIT_EXCEEDED: &str = "limit_exceeded";
     /// HTTP: the bearer token is missing or wrong.
     pub const UNAUTHORIZED: &str = "unauthorized";

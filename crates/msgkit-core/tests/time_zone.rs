@@ -139,7 +139,7 @@ fn the_json_entry_point_accepts_a_zone_and_refuses_wrong_types() {
 fn the_version_operation_reports_the_bundled_time_zone_database() {
     let v: Value = serde_json::from_str(&api::dispatch("version", "{}")).unwrap();
     assert_eq!(v["data"]["tzdata_version"], msgkit_core::tzdata_version());
-    assert_eq!(v["data"]["schema_version"], "1.1.0");
+    assert_eq!(v["data"]["schema_version"], "1.2.0");
 }
 
 #[test]

@@ -19,7 +19,7 @@ from typing import Any, Mapping, Optional, Union, cast
 
 from ._native import dispatch, native_version
 from .errors import MsgkitError
-from .types import DateOrder, DeviceBatch, ImportReport, VersionInfo
+from .types import DateOrder, DeviceBatch, ImportReport, Limits, VersionInfo
 
 __version__ = "0.2.0"
 
@@ -57,6 +57,7 @@ def parse_whatsapp_export(
     conversation_id: Optional[str] = None,
     default_country_code: Optional[str] = None,
     time_zone: Optional[str] = None,
+    limits: Optional[Limits] = None,
 ) -> ImportReport:
     """Parses a WhatsApp "Export chat" text file.
 
@@ -66,7 +67,11 @@ def parse_whatsapp_export(
     exact IANA name such as ``"Asia/Colombo"``; it replaces ``utc_offset_minutes``
     and follows the zone's daylight-saving rules (an unknown name raises
     ``MsgkitError`` with code ``invalid_input``). ``date_order`` is ``"auto"``
-    (default), ``"dmy"`` or ``"mdy"``.
+    (default), ``"dmy"`` or ``"mdy"``. ``limits`` sets the upper bounds for this import
+    (``max_input_bytes``, ``max_line_bytes``, ``max_messages``, ``max_json_depth``, each at
+    least 1; ``unlimited=True`` is the only way to switch the limits off, and ``0`` raises
+    ``MsgkitError`` with code ``invalid_input``); over a limit ``MsgkitError`` is raised with
+    code ``limit_exceeded``.
     """
     options = _options(
         self_name=self_name,
@@ -75,6 +80,7 @@ def parse_whatsapp_export(
         conversation_id=conversation_id,
         default_country_code=default_country_code,
         time_zone=time_zone,
+        limits=limits,
     )
     return cast(ImportReport, dispatch("parse_whatsapp_export", {"text": text, "options": options}))
 
@@ -84,14 +90,15 @@ def parse_facebook_export(
     *,
     self_name: Optional[str] = None,
     conversation_id: Optional[str] = None,
+    limits: Optional[Limits] = None,
 ) -> ImportReport:
     """Parses one Messenger ``message_N.json`` file ("Download Your Information").
 
-    ``thread`` is the parsed JSON object or its text.
+    ``thread`` is the parsed JSON object or its text. ``limits``: see :func:`parse_whatsapp_export`.
     """
     if isinstance(thread, str):
         thread = json.loads(thread)
-    options = _options(self_name=self_name, conversation_id=conversation_id)
+    options = _options(self_name=self_name, conversation_id=conversation_id, limits=limits)
     return cast(ImportReport, dispatch("parse_facebook_export", {"thread": thread, "options": options}))
 
 
@@ -100,28 +107,29 @@ def normalize_device(
     *,
     own_number: Optional[str] = None,
     default_country_code: Optional[str] = None,
+    limits: Optional[Limits] = None,
 ) -> ImportReport:
-    """Normalizes Android SMS and call-log rows collected on a device."""
-    options = _options(own_number=own_number, default_country_code=default_country_code)
+    """Normalizes Android SMS and call-log rows collected on a device. ``limits``: see :func:`parse_whatsapp_export`."""
+    options = _options(own_number=own_number, default_country_code=default_country_code, limits=limits)
     return cast(ImportReport, dispatch("normalize_device", {"batch": batch, "options": options}))
 
 
-def normalize_whatsapp_webhook(payload: Mapping[str, Any]) -> ImportReport:
+def normalize_whatsapp_webhook(payload: Mapping[str, Any], *, limits: Optional[Limits] = None) -> ImportReport:
     """Normalizes a WhatsApp Business Cloud API webhook payload.
 
     Does **not** verify the signature: call :func:`verify_signature` on the raw
-    request body first.
+    request body first. ``limits``: see :func:`parse_whatsapp_export`.
     """
-    return cast(ImportReport, dispatch("normalize_whatsapp_webhook", {"payload": payload}))
+    return cast(ImportReport, dispatch("normalize_whatsapp_webhook", _options(payload=payload, limits=limits)))
 
 
-def normalize_messenger_webhook(payload: Mapping[str, Any]) -> ImportReport:
+def normalize_messenger_webhook(payload: Mapping[str, Any], *, limits: Optional[Limits] = None) -> ImportReport:
     """Normalizes a Messenger Platform webhook payload.
 
     Does **not** verify the signature: call :func:`verify_signature` on the raw
-    request body first.
+    request body first. ``limits``: see :func:`parse_whatsapp_export`.
     """
-    return cast(ImportReport, dispatch("normalize_messenger_webhook", {"payload": payload}))
+    return cast(ImportReport, dispatch("normalize_messenger_webhook", _options(payload=payload, limits=limits)))
 
 
 def verify_signature(*, secret: str, body: Union[str, bytes], signature: str) -> bool:

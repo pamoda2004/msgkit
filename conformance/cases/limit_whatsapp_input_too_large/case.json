@@ -1,0 +1,12 @@
+{
+  "op": "parse_whatsapp_export",
+  "input": {
+    "text": "01/02/2024, 10:00 - Alice: hello\n01/02/2024, 10:01 - Bob: hi\n",
+    "options": {
+      "limits": {
+        "max_input_bytes": 20
+      }
+    }
+  },
+  "note": "The text is longer than max_input_bytes: nothing is imported"
+}

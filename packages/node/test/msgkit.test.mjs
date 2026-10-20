@@ -17,7 +17,7 @@ test('package version matches the Rust workspace version', () => {
   const cargo = readFileSync(new URL('../../../Cargo.toml', import.meta.url), 'utf8');
   assert.equal(pkg.version, /^version = "(.+)"$/m.exec(cargo)[1]);
   assert.equal(msgkit.version().crate_version, pkg.version);
-  assert.equal(msgkit.version().schema_version, '1.1.0');
+  assert.equal(msgkit.version().schema_version, '1.2.0');
 });
 
 test('WhatsApp export: Android day-first', () => {
@@ -57,6 +57,23 @@ test('WhatsApp export: an unknown time zone is invalid input and is not repeated
   assert.throws(
     () => msgkit.parseWhatsAppExport('01/02/2024, 10:00 - A: x\n', { time_zone: 'Mars/Phobos' }),
     (e) => e.code === 'invalid_input' && !e.message.includes('Phobos'),
+  );
+});
+
+test('limits: over a limit the call fails with limit_exceeded; only unlimited switches them off; 0 is invalid_input', () => {
+  const text = '01/02/2024, 10:00 - Alice: hello\n01/02/2024, 10:01 - Bob: hi\n';
+  assert.throws(
+    () => msgkit.parseWhatsAppExport(text, { limits: { max_messages: 1 } }),
+    (e) => e.code === 'limit_exceeded' && !e.message.includes('hello'),
+  );
+  assert.equal(msgkit.parseWhatsAppExport(text, { limits: { unlimited: true, max_messages: 1 } }).events.length, 2);
+  assert.throws(
+    () => msgkit.parseWhatsAppExport(text, { limits: { max_messages: 0 } }),
+    (e) => e.code === 'invalid_input' && !e.message.includes('hello'),
+  );
+  assert.throws(
+    () => msgkit.normalizeMessengerWebhook({ object: 'page', entry: [[[[]]]] }, { max_json_depth: 3 }),
+    (e) => e.code === 'limit_exceeded',
   );
 });
 
@@ -163,8 +180,8 @@ test('no memory leak across many calls', () => {
 test('initSync with explicit bytes and a fresh async init both work', async () => {
   const bytes = readFileSync(fileURLToPath(new URL('../dist/msgkit.wasm', import.meta.url)));
   msgkit.initSync(bytes);
-  assert.equal(msgkit.version().schema_version, '1.1.0');
+  assert.equal(msgkit.version().schema_version, '1.2.0');
   await msgkit.init(bytes);
-  assert.equal(msgkit.version().schema_version, '1.1.0');
+  assert.equal(msgkit.version().schema_version, '1.2.0');
   await assert.rejects(() => msgkit.init(42), TypeError);
 });

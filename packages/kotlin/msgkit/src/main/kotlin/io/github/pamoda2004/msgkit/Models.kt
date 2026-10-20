@@ -203,6 +203,11 @@ public data class WhatsAppExportOptions(
     /** Calling code (digits, e.g. `"94"`) used to normalize sender names that are national phone numbers. */
     @SerialName("default_country_code") val defaultCountryCode: String? = null,
     /**
+     * Upper bounds for this import. The defaults suit real exports. Over a limit the import fails with
+     * `limit_exceeded` and nothing is imported.
+     */
+    val limits: Limits = Limits(),
+    /**
      * IANA time-zone name of the phone (exact spelling, e.g. `"Asia/Colombo"`). When set it replaces
      * `utc_offset_minutes` and follows the zone's daylight-saving rules; event ids do not depend on
      * it. A time in a repeated hour uses the first occurrence and a time in a skipped hour moves
@@ -219,6 +224,11 @@ public data class FacebookExportOptions(
     @SerialName("self_name") val selfName: String? = null,
     /** Overrides the conversation id (defaults to the export's `thread_path`). */
     @SerialName("conversation_id") val conversationId: String? = null,
+    /**
+     * Upper bounds for this import. The defaults suit real exports. Over a limit the import fails with
+     * `limit_exceeded` and nothing is imported.
+     */
+    val limits: Limits = Limits(),
 )
 
 /** A row from `Telephony.Sms`. */
@@ -262,6 +272,38 @@ public data class DeviceOptions(
     @SerialName("own_number") val ownNumber: String? = null,
     /** Calling code (digits) for national numbers such as `0700000000`. */
     @SerialName("default_country_code") val defaultCountryCode: String? = null,
+    /**
+     * Upper bounds for this import. The defaults suit real devices. Only `max_messages` (SMS rows plus
+     * call rows) and the size and depth of the whole request apply to a batch. Over a limit the import
+     * fails with `limit_exceeded`.
+     */
+    val limits: Limits = Limits(),
+)
+
+/**
+ * Upper bounds for one import call; the call fails with `limit_exceeded` when one is passed. An absent
+ * or null limit has its default. A limit must be at least 1 (0 is refused as `invalid_input`); to
+ * switch the limits off set `unlimited` to true.
+ */
+@Serializable
+public data class Limits(
+    /**
+     * Largest accepted input, in bytes: the exported text for a WhatsApp export, the whole JSON
+     * document for the other imports. Absent: 33554432 (32 MiB).
+     */
+    @SerialName("max_input_bytes") val maxInputBytes: Long? = null,
+    /**
+     * Deepest accepted nesting of JSON arrays and objects in the document handed to msgkit. Through
+     * the JSON entry point that document is the whole request, so its wrapper object counts. Absent:
+     * 32.
+     */
+    @SerialName("max_json_depth") val maxJsonDepth: Long? = null,
+    /** Longest accepted line of a WhatsApp export, in bytes. Absent: 262144 (256 KiB). */
+    @SerialName("max_line_bytes") val maxLineBytes: Long? = null,
+    /** Most messages, calls and notices accepted in one import. Absent: 1000000. */
+    @SerialName("max_messages") val maxMessages: Long? = null,
+    /** Switches every limit off. The only way to do so; use it only for input you trust. Default `false`. */
+    val unlimited: Boolean = false,
 )
 
 // </generated types>

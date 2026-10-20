@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use axum::body::Body;
 use axum::http::{header, Request, StatusCode};
 use http_body_util::BodyExt;
+use msgkit_core::limits::Limits;
 use msgkit_service::{router, AppState, Config};
 use serde_json::Value;
 use tower::ServiceExt;
@@ -37,7 +38,8 @@ fn query(options: &Value) -> String {
     let Some(map) = options.as_object() else { return String::new() };
     let pairs: Vec<String> = map
         .iter()
-        .filter(|(_, v)| !v.is_null())
+        // Limits are the operator's setting on the service, not a request option (see `limits_of`).
+        .filter(|(k, v)| !v.is_null() && k.as_str() != "limits")
         .map(|(k, v)| {
             let text = v.as_str().map_or_else(|| v.to_string(), str::to_owned);
             format!("{k}={}", percent_encode(&text))
@@ -52,7 +54,7 @@ fn query(options: &Value) -> String {
 
 #[tokio::test]
 async fn the_http_service_matches_the_import_cases() {
-    let app = router(AppState::new(Config::default()).unwrap());
+    let default_app = router(AppState::new(Config::default()).unwrap());
     let mut names: Vec<PathBuf> =
         fs::read_dir(cases_dir()).unwrap().map(|e| e.unwrap().path()).filter(|p| p.is_dir()).collect();
     names.sort();
@@ -90,11 +92,23 @@ async fn the_http_service_matches_the_import_cases() {
             }
             _ => continue,
         };
+        // A case that sets `limits` runs against a service configured with them, as an operator would. A limit
+        // the service refuses to start with (0) has no HTTP equivalent: `AppState::new` rejects it at startup.
+        let app = match options.get("limits") {
+            Some(limits) => {
+                let limits: Limits = serde_json::from_value(limits.clone()).unwrap();
+                if limits.validate().is_err() {
+                    continue;
+                }
+                router(AppState::new(Config::default().with_limits(limits)).unwrap())
+            }
+            None => default_app.clone(),
+        };
         let request = Request::post(format!("{path}{}", query(options)))
             .header(header::CONTENT_TYPE, content_type)
             .body(Body::from(body))
             .unwrap();
-        let response = app.clone().oneshot(request).await.unwrap();
+        let response = app.oneshot(request).await.unwrap();
         let status = response.status();
         let bytes = response.into_body().collect().await.unwrap().to_bytes();
         if expects_error {
@@ -122,7 +136,7 @@ async fn the_http_service_matches_the_import_cases() {
         }
         checked += 1;
     }
-    assert!(checked >= 25, "only {checked} cases were checked over HTTP");
-    assert!(checked_errors >= 7, "only {checked_errors} error cases were checked over HTTP");
+    assert!(checked >= 26, "only {checked} cases were checked over HTTP");
+    assert!(checked_errors >= 12, "only {checked_errors} error cases were checked over HTTP");
     assert!(failures.is_empty(), "HTTP conformance failures:\n{}", failures.join("\n"));
 }

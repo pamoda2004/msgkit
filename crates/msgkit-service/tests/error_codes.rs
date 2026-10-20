@@ -16,11 +16,13 @@ const TOKEN: &str = "verify-me";
 
 fn config(api_token: Option<&str>, webhooks: bool) -> Config {
     let wh = WebhookConfig { app_secret: SECRET.into(), verify_token: TOKEN.into() };
-    Config {
-        whatsapp: webhooks.then(|| wh.clone()),
-        messenger: webhooks.then_some(wh),
-        api_token: api_token.map(str::to_owned),
-        db_path: None,
+    let mut config = Config::default();
+    if webhooks {
+        config = config.with_whatsapp(wh.clone()).with_messenger(wh);
+    }
+    match api_token {
+        Some(token) => config.with_api_token(token),
+        None => config,
     }
 }
 
@@ -54,7 +56,7 @@ struct Case {
 #[tokio::test]
 async fn http_error_responses_carry_stable_codes() {
     let big_webhook = vec![b'a'; 2 * 1024 * 1024 + 1];
-    let big_import = vec![b' '; 64 * 1024 * 1024 + 1];
+    let big_import = vec![b' '; 32 * 1024 * 1024 + 1];
     let case = |name, token, webhooks, request, status, code, error| Case {
         name,
         token,
@@ -295,12 +297,7 @@ async fn authentication_errors_do_not_leak_secrets_or_the_request() {
     const BODY: &str = r#"{"object":"whatsapp_business_account","note":"body-ZXQMARKER"}"#;
 
     let wh = WebhookConfig { app_secret: APP_SECRET.into(), verify_token: VERIFY_TOKEN.into() };
-    let config = Config {
-        whatsapp: Some(wh.clone()),
-        messenger: Some(wh),
-        api_token: Some(API_TOKEN.to_owned()),
-        db_path: None,
-    };
+    let config = Config::default().with_whatsapp(wh.clone()).with_messenger(wh).with_api_token(API_TOKEN);
     let computed = msgkit_core::webhook::sign(APP_SECRET.as_bytes(), BODY.as_bytes());
     let computed_hex = computed.trim_start_matches("sha256=").to_owned();
 

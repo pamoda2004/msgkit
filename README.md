@@ -98,6 +98,7 @@ crates/
   msgkit-service/   HTTP sidecar (axum)
   msgkit-ffi/       C ABI (cdylib/staticlib) + include/msgkit.h
   msgkit-wasm/      WebAssembly build (no imports, tiny C-like ABI)
+  msgkit-redact/    optional, best-effort masking of phone, NIC, card, account and email values (Rust only, see docs/REDACTION.md)
 packages/
   node/             @pamoda2004/msgkit: JS host for the wasm module + TypeScript types
   python/           msgkit: ctypes wrapper, typed, platform wheel

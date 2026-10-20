@@ -64,6 +64,7 @@ The `normalize_*_webhook` operations do not verify signatures; verify first.
 | Item | Level |
 |---|---|
 | `SqliteStore::{open, open_in_memory, prune_acknowledged}` and its `EventStore` implementation | Stable |
+| `POST /v1/store/erase` (request `address`, `drop_ids`; answer `erased`, `request_id`, `handled_at`) | Unstable until a release has used it |
 | `SqliteStore::{open_with, open_in_memory_with, checkpoint, compact}`, `StoreOptions`, and the `EraseStore` and `RetentionStore` implementations | Unstable until a release has used them |
 | `DEFAULT_RETENTION` | Stable |
 | Database file layout | Unstable: do not read or write the file yourself. |

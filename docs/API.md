@@ -109,6 +109,7 @@ Configuration (environment):
 | `MSGKIT_WHATSAPP_VERIFY_TOKEN` | handshake token | unset → handshake rejected |
 | `MSGKIT_MESSENGER_APP_SECRET` / `_VERIFY_TOKEN` | same for Messenger | unset |
 | `MSGKIT_DB_PATH` | SQLite file for webhook events | unset → in memory, **lost on restart** |
+| `MSGKIT_DEFAULT_COUNTRY_CODE` | calling code (1 to 3 digits, e.g. `94`) used to read national-format phone numbers in `POST /v1/store/erase`; the one your events were imported with. Only the operator sets it | unset (only `+` numbers are recognised as phone numbers) |
 | `MSGKIT_ID_RETENTION_DAYS` | days an acknowledged, erased or expired event id is remembered to reject redelivered webhooks (whole days, 1 to 36500). Ids are pseudonymous personal data; Meta retries for several days, so do not go very low | 30 |
 | `MSGKIT_PENDING_MAX_AGE_DAYS` | erase events that were received this many days ago and never acknowledged (their ids stay for the id retention); whole days, 1 to 36500 | unset (keep until acknowledged) |
 | `MSGKIT_MAX_INPUT_BYTES` | largest request body for the imports (webhooks: the lower of this and 2 MiB); a whole number of at least 1 | 33554432 (32 MiB) |

@@ -67,6 +67,8 @@ pub mod codes {
     pub const NOT_CONFIGURED: &str = "not_configured";
     /// HTTP: a request to `/v1/*` of a service without an API token whose `Host` header is not allowed.
     pub const HOST_NOT_ALLOWED: &str = "host_not_allowed";
+    /// HTTP: the service's store cannot do what was asked (a custom store that cannot erase).
+    pub const NOT_SUPPORTED: &str = "not_supported";
 
     /// Every code, in documentation order.
     pub const ALL: &[&str] = &[
@@ -81,6 +83,7 @@ pub mod codes {
         VERIFICATION_FAILED,
         NOT_CONFIGURED,
         HOST_NOT_ALLOWED,
+        NOT_SUPPORTED,
     ];
 }
 

@@ -9,7 +9,7 @@ defusedxml==0.7.1
 fqdn==1.6.0
 idna==3.20
 isoduration==20.11.0
-jsonpointer==3.4
+jsonpointer==3.6
 jsonschema==4.26.0
 jsonschema-specifications==2025.9.1
 lark==1.3.1

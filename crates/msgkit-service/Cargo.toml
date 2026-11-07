@@ -25,7 +25,7 @@ sqlcipher-vendored = ["sqlcipher", "msgkit-store-sqlite/sqlcipher-vendored"]
 axum = "0.8.9"
 getrandom = "0.4.3"
 # The same exact pin as msgkit-core (a jiff bump is a behaviour change, see the tzdata policy); no time-zone data here.
-jiff = { version = "=0.2.38", default-features = false, features = ["std"] }
+jiff = { version = "=0.2.39", default-features = false, features = ["std"] }
 msgkit-core.workspace = true
 msgkit-store-sqlite.workspace = true
 serde = { version = "1.0.229", features = ["derive"] }
